@@ -64,10 +64,10 @@ svn export https://github.com/sbwml/luci-app-alist/trunk/alist package/alist
 # svn export https://github.com/linkease/istore/trunk/luci package/luci-app-store
 
 # 在线用户
-svn export https://github.com/haiibo/packages/trunk/luci-app-onliner package/luci-app-onliner
-sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/lean/default-settings/files/zzz-default-settings
-sed -i '$i uci commit nlbwmon' package/lean/default-settings/files/zzz-default-settings
-chmod 755 package/luci-app-onliner/root/usr/share/onliner/setnlbw.sh
+# svn export https://github.com/haiibo/packages/trunk/luci-app-onliner package/luci-app-onliner
+# sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/lean/default-settings/files/zzz-default-settings
+# sed -i '$i uci commit nlbwmon' package/lean/default-settings/files/zzz-default-settings
+# chmod 755 package/luci-app-onliner/root/usr/share/onliner/setnlbw.sh
 
 # x86 型号只显示 CPU 型号
 sed -i 's/${g}.*/${a}${b}${c}${d}${e}${f}${hydrid}/g' package/lean/autocore/files/x86/autocore
