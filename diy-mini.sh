@@ -29,12 +29,12 @@ git clone https://github.com/sirpdboy/luci-app-autotimeset package/luci-app-auto
 
 # 科学上网插件
 git clone --depth=1 -b main https://github.com/fw876/helloworld package/luci-app-ssr-plus
-svn export https://github.com/haiibo/packages/trunk/luci-app-vssr package/luci-app-vssr
+# svn export https://github.com/haiibo/packages/trunk/luci-app-vssr package/luci-app-vssr
 git clone --depth=1 https://github.com/jerrykuku/lua-maxminddb package/lua-maxminddb
 git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
-svn export https://github.com/xiaorouji/openwrt-passwall/trunk/luci-app-passwall package/luci-app-passwall
-svn export https://github.com/xiaorouji/openwrt-passwall2/trunk/luci-app-passwall2 package/luci-app-passwall2
-svn export https://github.com/vernesong/OpenClash/trunk/luci-app-openclash package/luci-app-openclash
+# svn export https://github.com/xiaorouji/openwrt-passwall/trunk/luci-app-passwall package/luci-app-passwall
+# svn export https://github.com/xiaorouji/openwrt-passwall2/trunk/luci-app-passwall2 package/luci-app-passwall2
+# svn export https://github.com/vernesong/OpenClash/trunk/luci-app-openclash package/luci-app-openclash
 git clone https://github.com/xiaorouji/openwrt-passwall-packages.git package/openwrt-passwall
 git clone https://github.com/xiaorouji/openwrt-passwall.git package/passwall
 
@@ -45,7 +45,7 @@ git clone https://github.com/firker/diy-ziyong.git package/diy-ziyong
 # git clone --depth=1 -b 18.06 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
 # git clone --depth=1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
 # git clone --depth=1 https://github.com/xiaoqingfengATGH/luci-theme-infinityfreedom package/luci-theme-infinityfreedom
-svn export https://github.com/haiibo/packages/trunk/luci-theme-opentomcat package/luci-theme-opentomcat
+# svn export https://github.com/haiibo/packages/trunk/luci-theme-opentomcat package/luci-theme-opentomcat
 
 # 更改默认主题
 sed -i 's/luci-theme-bootstrap/luci-theme-opentomcat/g' ./feeds/luci/collections/luci/Makefile
@@ -59,12 +59,12 @@ git clone --depth=1 https://github.com/ximiTech/luci-app-msd_lite package/luci-a
 git clone --depth=1 https://github.com/ximiTech/msd_lite package/msd_lite
 
 # MosDNS
-svn export https://github.com/sbwml/luci-app-mosdns/trunk/luci-app-mosdns package/luci-app-mosdns
-svn export https://github.com/sbwml/luci-app-mosdns/trunk/mosdns package/mosdns
+# svn export https://github.com/sbwml/luci-app-mosdns/trunk/luci-app-mosdns package/luci-app-mosdns
+# svn export https://github.com/sbwml/luci-app-mosdns/trunk/mosdns package/mosdns
 
 # Alist
-svn export https://github.com/sbwml/luci-app-alist/trunk/luci-app-alist package/luci-app-alist
-svn export https://github.com/sbwml/luci-app-alist/trunk/alist package/alist
+# svn export https://github.com/sbwml/luci-app-alist/trunk/luci-app-alist package/luci-app-alist
+# svn export https://github.com/sbwml/luci-app-alist/trunk/alist package/alist
 
 # iStore
 # svn export https://github.com/linkease/istore-ui/trunk/app-store-ui package/app-store-ui
