@@ -46,7 +46,7 @@ git clone https://github.com/xiaorouji/openwrt-passwall.git package/passwall
 # git clone --depth=1 -b 18.06 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
 # git clone --depth=1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
 # git clone --depth=1 https://github.com/xiaoqingfengATGH/luci-theme-infinityfreedom package/luci-theme-infinityfreedom
-git clone https://github.com/haiibo/packages/trunk/luci-theme-opentomcat package/luci-theme-opentomcat
+git clone https://github.com/haiibo/openwrt-packages/tree/master/luci-theme-opentomcat package/luci-theme-opentomcat
 
 # 更改默认主题
 sed -i 's/luci-theme-bootstrap/luci-theme-opentomcat/g' ./feeds/luci/collections/luci/Makefile
