@@ -46,6 +46,7 @@ git clone https://github.com/haiibo/openwrt-packages package/openwrt-packages
 # git clone --depth=1 -b 18.06 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
 # git clone --depth=1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
 # git clone --depth=1 https://github.com/xiaoqingfengATGH/luci-theme-infinityfreedom package/luci-theme-infinityfreedom
+git clone https://github.com/gngpp/luci-theme-design.git  package/luci-theme-design
 
 # 更改默认主题
 sed -i 's/luci-theme-bootstrap/luci-theme-opentomcat/g' ./feeds/luci/collections/luci/Makefile
