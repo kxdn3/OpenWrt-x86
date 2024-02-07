@@ -22,6 +22,7 @@ rm -rf feeds/luci/applications/luci-app-netdata
 rm -rf feeds/packages/net/ddns-scripts
 rm -rf package/lean/ddns-scripts_aliyun
 rm -rf package/lean/ddns-scripts_dnspod
+rm -rf  package/amdgpu-firmware
 
 # Git稀疏克隆，只克隆指定目录到本地
 function git_sparse_clone() {
