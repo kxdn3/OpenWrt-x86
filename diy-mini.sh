@@ -36,7 +36,7 @@ git clone --depth=1 https://github.com/kongfl888/luci-app-adguardhome package/lu
 git clone --depth=1 https://github.com/Jason6111/luci-app-netdata package/luci-app-netdata
 # git_sparse_clone master https://github.com/syb999/openwrt-19.07.1 package/network/services/msd_lite
 git clone https://github.com/gdy666/luci-app-lucky.git package/lucky
-# git clone https://github.com/sbwml/feeds_packages_net_curl feeds/packages/net/curl
+git clone https://github.com/kxdn3/luci-app-pushbot package/luci-app-pushbot
 
 # 科学上网插件
 git clone --depth=1 -b main https://github.com/fw876/helloworld package/luci-app-ssr-plus
