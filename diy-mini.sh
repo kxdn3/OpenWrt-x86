@@ -39,7 +39,7 @@ git clone --depth=1 https://github.com/Jason6111/luci-app-netdata package/luci-a
 git clone https://github.com/gdy666/luci-app-lucky.git package/lucky
 git clone https://github.com/kxdn3/luci-app-pushbot package/luci-app-pushbot
 git clone https://github.com/lisaac/luci-app-dockerman package/luci-app-dockerman
-git clone -b openwrt-18.06 https://github.com/tty228/luci-app-wechatpush.git package/luci-app-wechatpush
+git clone --depth=1 -b openwrt-18.06 https://github.com/tty228/luci-app-wechatpush package/luci-app-serverchan
 
 #  科学上网插件
 git clone --depth=1 -b main https://github.com/fw876/helloworld package/luci-app-ssr-plus
