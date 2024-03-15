@@ -39,7 +39,7 @@ git clone --depth=1 https://github.com/Jason6111/luci-app-netdata package/luci-a
 # git_sparse_clone master https://github.com/syb999/openwrt-19.07.1 package/network/services/msd_lite
 git clone https://github.com/gdy666/luci-app-lucky.git package/lucky
 git clone https://github.com/kxdn3/luci-app-pushbot package/luci-app-pushbot
-git clone https://github.com/lisaac/luci-app-dockerman package/luci-app-dockerman
+git clone https://github.com/WYC-2020/luci-app-dockerman package/applications/luci-app-dockerman
 git clone --depth=1 -b openwrt-18.06 https://github.com/tty228/luci-app-wechatpush package/luci-app-serverchan
 git clone https://github.com/lisaac/luci-app-diskman package/applications/luci-app-diskman
 
