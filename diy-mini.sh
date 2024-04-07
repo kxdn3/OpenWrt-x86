@@ -49,6 +49,7 @@ git clone https://github.com/kxdn3/luci-app-pushbot package/luci-app-pushbot
 git clone https://github.com/WYC-2020/luci-app-dockerman package/applications/luci-app-dockerman
 git clone --depth=1 -b openwrt-18.06 https://github.com/tty228/luci-app-wechatpush package/luci-app-serverchan
 git clone https://github.com/lisaac/luci-app-diskman package/applications/luci-app-diskman
+git clone https://github.com/openwrt/packages/tree/master/net/haproxy package/haproxy
 
 # 科学上网插件
 # git clone --depth=1 -b main https://github.com/fw876/helloworld package/luci-app-ssr-plus
