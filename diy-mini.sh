@@ -149,6 +149,14 @@ find package/*/ -maxdepth 2 -path "*/Makefile" | xargs -i sed -i 's/PKG_SOURCE_U
 # 取消对 samba4 的菜单调整
 # sed -i '/samba4/s/^/#/' package/lean/default-settings/files/zzz-default-settings
 
+# 取消一些预选的软件包
+sed -i 's/luci-app-vsftpd //g' include/target.mk
+sed -i 's/luci-app-ssr-plus //g' include/target.mk
+sed -i 's/luci-app-vlmcsd //g' include/target.mk
+sed -i 's/luci-app-accesscontrol //g' include/target.mk
+sed -i 's/luci-app-nlbwmon //g' include/target.mk
+# sed -i 's/luci-app-turboacc //g' include/target.mk
+
 # golang 1.22
 rm -rf feeds/packages/lang/golang
 git clone --depth=1 https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
