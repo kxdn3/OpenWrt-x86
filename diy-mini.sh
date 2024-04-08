@@ -29,6 +29,7 @@ rm -rf feeds/luci/applications/luci-app-netdata
 rm -rf feeds/luci/applications/luci-app-pushbot
 rm -rf feeds/luci/applications/luci-app-dockerman
 rm -rf feeds/luci/applications/luci-app-diskman
+rm -rf feeds/packages/net/haproxy
 
 # Git稀疏克隆，只克隆指定目录到本地
 function git_sparse_clone() {
