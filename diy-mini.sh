@@ -29,7 +29,7 @@ rm -rf feeds/luci/applications/luci-app-netdata
 rm -rf feeds/luci/applications/luci-app-pushbot
 rm -rf feeds/luci/applications/luci-app-dockerman
 rm -rf feeds/luci/applications/luci-app-diskman
-rm -rf feeds/packages/net/haproxy
+# rm -rf feeds/packages/net/haproxy
 
 # Git稀疏克隆，只克隆指定目录到本地
 function git_sparse_clone() {
@@ -50,7 +50,7 @@ git clone https://github.com/kxdn3/luci-app-pushbot package/luci-app-pushbot
 git clone https://github.com/WYC-2020/luci-app-dockerman package/applications/luci-app-dockerman
 git clone --depth=1 -b openwrt-18.06 https://github.com/tty228/luci-app-wechatpush package/luci-app-serverchan
 git clone https://github.com/lisaac/luci-app-diskman package/applications/luci-app-diskman
-git clone https://github.com/immortalwrt/packages package/net/haproxy
+# git clone https://github.com/immortalwrt/packages package/net/haproxy
 
 # 科学上网插件
 # git clone --depth=1 -b main https://github.com/fw876/helloworld package/luci-app-ssr-plus
