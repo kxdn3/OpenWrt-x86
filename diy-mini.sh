@@ -106,6 +106,10 @@ git clone --depth=1 https://github.com/pymumu/openwrt-smartdns package/smartdns
 rm -rf feeds/packages/utils/unzip
 git clone https://github.com/sbwml/feeds_packages_utils_unzip feeds/packages/utils/unzip
 
+# coremark
+rm -rf feeds/packages/utils/coremark
+merge_package main https://github.com/sbwml/openwrt_pkgs feeds/packages/utils coremark
+
 # 在线用户
 # git_sparse_clone main https://github.com/haiibo/packages luci-app-onliner
 # sed -i '$i uci set nlbwmon.@nlbwmon[0].refresh_interval=2s' package/lean/default-settings/files/zzz-default-settings
