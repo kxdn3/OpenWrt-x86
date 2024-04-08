@@ -102,9 +102,9 @@ git clone --depth=1 https://github.com/pymumu/openwrt-smartdns package/smartdns
 # Alist
 # git clone --depth=1 https://github.com/sbwml/luci-app-alist package/luci-app-alist
 
-# iStore
-# git_sparse_clone main https://github.com/linkease/istore-ui app-store-ui
-# git_sparse_clone main https://github.com/linkease/istore luci
+# unzip
+rm -rf feeds/packages/utils/unzip
+git clone https://github.com/sbwml/feeds_packages_utils_unzip feeds/packages/utils/unzip
 
 # 在线用户
 # git_sparse_clone main https://github.com/haiibo/packages luci-app-onliner
