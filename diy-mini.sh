@@ -70,10 +70,14 @@ git clone -b luci-smartdns-dev --single-branch https://github.com/lwb1978/openwr
 # git clone https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
 # ------------------------------------------------------------
 
-# 拉取immortalwrt仓库组件
-rm -rf feeds/packages/net/{haproxy,msd_lite,curl}
-merge_package master https://github.com/immortalwrt/packages feeds/packages/net net/haproxy net/msd_lite net/curl
+# 拉取immortalwrt仓库haproxy
+rm -rf feeds/packages/net/haproxy
+merge_package master https://github.com/immortalwrt/packages feeds/packages/net net/haproxy
 
+# 更新curl版本
+rm -rf feeds/packages/net/curl
+git clone https://github.com/sbwml/feeds_packages_net_curl feeds/packages/net/curl
+ 
 # Themes
 # git clone --depth=1 -b 18.06 https://github.com/kiddin9/luci-theme-edge package/luci-theme-edge
 git clone --depth=1 -b 18.06 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
