@@ -59,8 +59,8 @@ git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall package/luci-a
 # git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages package/simple-
 
 # 更新haproxy
-# rm -rf feeds/packages/net/haproxy
-# git clone https://github.com/openwrt/packages package/net/haproxy
+rm -rf feeds/packages/net/haproxy
+git clone https://github.com/openwrt/packages package/net/haproxy
 
 # 更新curl版本
 rm -rf feeds/packages/net/curl
