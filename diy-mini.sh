@@ -63,8 +63,8 @@ git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall package/luci-a
 # git clone https://github.com/openwrt/packages package/net/haproxy
 
 # 更新curl版本
-# rm -rf feeds/packages/net/curl
-# git clone https://github.com/sbwml/feeds_packages_net_curl feeds/packages/net/curl
+rm -rf feeds/packages/net/curl
+git clone https://github.com/sbwml/feeds_packages_net_curl feeds/packages/net/curl
  
 # Themes
 # git clone --depth=1 -b 18.06 https://github.com/kiddin9/luci-theme-edge package/luci-theme-edge
