@@ -60,11 +60,11 @@ git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall package/luci-a
 
 # 更新haproxy
 rm -rf feeds/packages/net/haproxy
-git clone https://github.com/openwrt/packages/tree/master package/net/haproxy
+git clone https://github.com/openwrt/packages/tree/master/net package/haproxy
 
 # 更新curl版本
 rm -rf feeds/packages/net/curl
-git clone https://github.com/openwrt/packages/tree/master package/net/curl
+git clone https://github.com/openwrt/packages/tree/master/net package/curl
  
 # Themes
 # git clone --depth=1 -b 18.06 https://github.com/kiddin9/luci-theme-edge package/luci-theme-edge
