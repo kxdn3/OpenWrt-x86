@@ -19,6 +19,34 @@ sed -i 's|/bin/login|/bin/login -f root|g' feeds/packages/utils/ttyd/files/ttyd.
 sed -i "s/timezone='.*'/timezone='CST-8'/g" $CFG_FILE
 sed -i "/timezone='.*'/a\\\t\t\set system.@system[-1].zonename='Asia/Shanghai'" $CFG_FILE
 
+# 拉取仓库文件夹
+function merge_package() {
+	# 参数1是分支名,参数2是库地址,参数3是所有文件下载到指定路径。
+	# 同一个仓库下载多个文件夹直接在后面跟文件名或路径，空格分开。
+	# 示例:
+	# merge_package master https://github.com/WYC-2020/openwrt-packages package/openwrt-packages luci-app-eqos luci-app-openclash luci-app-ddnsto ddnsto 
+	# merge_package master https://github.com/lisaac/luci-app-dockerman package/lean applications/luci-app-dockerman
+	if [[ $# -lt 3 ]]; then
+		echo "Syntax error: [$#] [$*]" >&2
+		return 1
+	fi
+	trap 'rm -rf "$tmpdir"' EXIT
+	branch="$1" curl="$2" target_dir="$3" && shift 3
+	rootdir="$PWD"
+	localdir="$target_dir"
+	[ -d "$localdir" ] || mkdir -p "$localdir"
+	tmpdir="$(mktemp -d)" || exit 1
+	git clone -b "$branch" --depth 1 --filter=blob:none --sparse "$curl" "$tmpdir"
+	cd "$tmpdir"
+	git sparse-checkout init --cone
+	git sparse-checkout set "$@"
+	# 使用循环逐个移动文件夹
+	for folder in "$@"; do
+		mv -f "$folder" "$rootdir/$localdir"
+	done
+	cd "$rootdir"
+}
+
 # 移除要替换的包
 rm -rf feeds/packages/net/mosdns
 rm -rf feeds/packages/net/msd_lite
@@ -29,8 +57,6 @@ rm -rf feeds/luci/applications/luci-app-netdata
 rm -rf feeds/luci/applications/luci-app-pushbot
 rm -rf feeds/luci/applications/luci-app-dockerman
 rm -rf feeds/luci/applications/luci-app-diskman
-rm -rf feeds/packages/net/curl
-rm -rf feeds/packages/net/haproxy
 
 # Git稀疏克隆，只克隆指定目录到本地
 function git_sparse_clone() {
@@ -54,6 +80,13 @@ git clone https://github.com/lisaac/luci-app-diskman package/applications/luci-a
 git clone https://github.com/openwrt/packages/tree/master/net package/haproxy
 git clone https://github.com/openwrt/packages/tree/master/net package/curl
 
+# 拉取immortalwrt仓库组件
+rm -rf feeds/packages/net/{haproxy,msd_lite,curl}
+merge_package master https://github.com/immortalwrt/packages feeds/packages/net net/haproxy net/msd_lite net/curl
+
+# libnghttp3 libngtcp2
+ merge_package master https://github.com/openwrt/packages feeds/packages/libs libs/nghttp3 libs/ngtcp2
+ 
 # 科学上网插件
 # git clone --depth=1 -b main https://github.com/fw876/helloworld package/luci-app-ssr-plus
 git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
