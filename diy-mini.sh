@@ -52,23 +52,11 @@ git clone https://github.com/lisaac/luci-app-diskman package/applications/luci-a
 
 # 科学上网插件
 # git clone --depth=1 -b main https://github.com/fw876/helloworld package/luci-app-ssr-plus
-# git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
-# git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall package/luci-app-passwall
+git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
+git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall package/luci-app-passwall
 # git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall2 package/luci-app-passwall2
 # git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclash
-# git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages package/simple-obfs
-
-# ------------------PassWall 科学上网--------------------------
-# 移除 openwrt feeds 自带的核心包
-rm -rf feeds/packages/net/{xray-core,v2ray-core,v2ray-geodata,sing-box}
-# 拉取sbwml大佬的组件库并只保留核心包
-git clone --depth=1 https://github.com/sbwml/openwrt_helloworld package/openwrt-passwall
-rm -rf package/openwrt-passwall/{luci-app-passwall,luci-app-passwall2,luci-app-ssr-plus}
-# 拉取xiaorouji仓库app
-git clone -b luci-smartdns-dev --single-branch https://github.com/lwb1978/openwrt-passwall package/luci-app-passwall
-# git clone https://github.com/xiaorouji/openwrt-passwall package/luci-app-passwall
-# git clone https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
-# ------------------------------------------------------------
+# git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages package/simple-
 
 # 拉取immortalwrt仓库haproxy
 rm -rf feeds/packages/net/haproxy
