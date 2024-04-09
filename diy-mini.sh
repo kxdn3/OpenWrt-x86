@@ -58,9 +58,9 @@ git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall package/luci-a
 # git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclash
 # git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages package/simple-
 
-# 拉取immortalwrt仓库组件
-rm -rf feeds/packages/net/{haproxy,msd_lite}
-merge_package master https://github.com/immortalwrt/packages feeds/packages/net net/haproxy net/msd_lite
+# 拉取immortalwrt仓库haproxy
+rm -rf feeds/packages/net/haproxy
+git clone https://github.com/immortalwrt/packages package/net/haproxy
 
 # 更新curl版本
 rm -rf feeds/packages/net/curl
