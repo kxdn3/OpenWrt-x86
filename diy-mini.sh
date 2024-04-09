@@ -84,7 +84,15 @@ merge_package master https://github.com/immortalwrt/packages feeds/packages/net 
 
 # libnghttp3 libngtcp2
  merge_package master https://github.com/openwrt/packages feeds/packages/libs libs/nghttp3 libs/ngtcp2
- 
+
+ # coremark
+rm -rf feeds/packages/utils/coremark
+merge_package main https://github.com/sbwml/openwrt_pkgs feeds/packages/utils coremark
+
+# unzip
+rm -rf feeds/packages/utils/unzip
+git clone https://github.com/sbwml/feeds_packages_utils_unzip feeds/packages/utils/unzip
+
 # 科学上网插件
 # git clone --depth=1 -b main https://github.com/fw876/helloworld package/luci-app-ssr-plus
 git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages package/openwrt-passwall
