@@ -29,6 +29,8 @@ rm -rf feeds/luci/applications/luci-app-netdata
 rm -rf feeds/luci/applications/luci-app-pushbot
 rm -rf feeds/luci/applications/luci-app-dockerman
 rm -rf feeds/luci/applications/luci-app-diskman
+rm -rf feeds/packages/net/curl
+rm -rf feeds/packages/net/haproxy
 
 # Git稀疏克隆，只克隆指定目录到本地
 function git_sparse_clone() {
@@ -49,6 +51,8 @@ git clone https://github.com/kxdn3/luci-app-pushbot package/luci-app-pushbot
 git clone https://github.com/WYC-2020/luci-app-dockerman package/applications/luci-app-dockerman
 git clone --depth=1 -b openwrt-18.06 https://github.com/tty228/luci-app-wechatpush package/luci-app-serverchan
 git clone https://github.com/lisaac/luci-app-diskman package/applications/luci-app-diskman
+git clone https://github.com/openwrt/packages/tree/master/net package/haproxy
+git clone https://github.com/openwrt/packages/tree/master/net package/curl
 
 # 科学上网插件
 # git clone --depth=1 -b main https://github.com/fw876/helloworld package/luci-app-ssr-plus
@@ -56,15 +60,6 @@ git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages packa
 git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall package/luci-app-passwall
 # git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall2 package/luci-app-passwall2
 # git_sparse_clone master https://github.com/vernesong/OpenClash luci-app-openclash
-# git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall-packages package/simple-
-
-# 更新haproxy
-rm -rf feeds/packages/net/haproxy
-git clone https://github.com/openwrt/packages/tree/master/net package/haproxy
-
-# 更新curl版本
-rm -rf feeds/packages/net/curl
-git clone https://github.com/openwrt/packages/tree/master/net package/curl
  
 # Themes
 # git clone --depth=1 -b 18.06 https://github.com/kiddin9/luci-theme-edge package/luci-theme-edge
@@ -93,14 +88,6 @@ git clone --depth=1 https://github.com/pymumu/openwrt-smartdns package/smartdns
 
 # Alist
 # git clone --depth=1 https://github.com/sbwml/luci-app-alist package/luci-app-alist
-
-# unzip
-rm -rf feeds/packages/utils/unzip
-git clone https://github.com/sbwml/feeds_packages_utils_unzip feeds/packages/utils/unzip
-
-# coremark
-rm -rf feeds/packages/utils/coremark
-merge_package main https://github.com/sbwml/openwrt_pkgs feeds/packages/utils coremark
 
 # 在线用户
 # git_sparse_clone main https://github.com/haiibo/packages luci-app-onliner
@@ -144,10 +131,6 @@ find package/*/ -maxdepth 2 -path "*/Makefile" | xargs -i sed -i 's/PKG_SOURCE_U
 
 # 取消对 samba4 的菜单调整
 # sed -i '/samba4/s/^/#/' package/lean/default-settings/files/zzz-default-settings
-
-# golang 1.22
-rm -rf feeds/packages/lang/golang
-git clone --depth=1 https://github.com/sbwml/packages_lang_golang feeds/packages/lang/golang
 
 ./scripts/feeds update -a
 ./scripts/feeds install -a
