@@ -126,7 +126,7 @@ git clone --depth=1 https://github.com/pymumu/openwrt-smartdns package/smartdns
 # git clone --depth=1 https://github.com/sbwml/luci-app-mosdns package/luci-app-mosdns
 
 # Alist
-# git clone --depth=1 https://github.com/sbwml/luci-app-alist package/luci-app-alist
+git clone --depth=1 https://github.com/sbwml/luci-app-alist package/luci-app-alist
 
 # 在线用户
 # git_sparse_clone main https://github.com/haiibo/packages luci-app-onliner
