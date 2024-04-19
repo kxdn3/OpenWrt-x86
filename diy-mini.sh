@@ -94,11 +94,7 @@ git clone https://github.com/lisaac/luci-app-diskman package/applications/luci-a
 # libnghttp3 libngtcp2
 # merge_package master https://github.com/openwrt/packages feeds/packages/libs libs/nghttp3 libs/ngtcp2
 
-# nghttp2
-sed -i 's/PKG_VERSION:=.*/PKG_VERSION:=1.57.0/g' feeds/packages/libs/nghttp2/Makefile
-sed -i 's/PKG_HASH:=.*/PKG_HASH:=9210b0113109f43be526ac5835d58a701411821a4d39e155c40d67c40f47a958/g' feeds/packages/libs/nghttp2/Makefile
-
- # coremark
+# coremark
 rm -rf feeds/packages/utils/coremark
 merge_package main https://github.com/sbwml/openwrt_pkgs feeds/packages/utils coremark
 
