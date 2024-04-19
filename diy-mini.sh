@@ -85,6 +85,17 @@ merge_package master https://github.com/immortalwrt/packages feeds/packages/net 
 # libnghttp3 libngtcp2
  merge_package master https://github.com/openwrt/packages feeds/packages/libs libs/nghttp3 libs/ngtcp2
 
+
+# nghttp2
+sed -i 's/PKG_VERSION:=.*/PKG_VERSION:=1.57.0/g' feeds/packages/libs/nghttp2/Makefile
+sed -i 's/PKG_HASH:=.*/PKG_HASH:=9210b0113109f43be526ac5835d58a701411821a4d39e155c40d67c40f47a958/g' feeds/packages/libs/nghttp2/Makefile
+
+# ttyd
+sed -i 's/PKG_VERSION:=.*/PKG_VERSION:=1.7.3/g' feeds/packages/utils/ttyd/Makefile
+sed -i 's/PKG_RELEASE:=.*/PKG_RELEASE:=1/g' feeds/packages/utils/ttyd/Makefile
+sed -i 's/PKG_HASH:=.*/PKG_HASH:=c9cf5eece52d27c5d728000f11315d36cb400c6948d1964a34a7eae74b454099/g' feeds/packages/utils/ttyd/Makefile
+rm -f feeds/packages/utils/ttyd/patches/090*.patch
+
  # coremark
 rm -rf feeds/packages/utils/coremark
 merge_package main https://github.com/sbwml/openwrt_pkgs feeds/packages/utils coremark
