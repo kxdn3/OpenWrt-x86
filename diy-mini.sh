@@ -82,12 +82,14 @@ git clone --depth=1 -b openwrt-18.06 https://github.com/tty228/luci-app-wechatpu
 git clone https://github.com/lisaac/luci-app-diskman package/applications/luci-app-diskman
 
 # 拉取immortalwrt仓库组件
-rm -rf feeds/packages/net/{haproxy,msd_lite,socat}
-merge_package master https://github.com/immortalwrt/packages feeds/packages/net net/haproxy net/msd_lite net/socat
-rm -rf feeds/packages/libs/nghttp2
-merge_package master https://github.com/immortalwrt/packages feeds/packages/libs libs/nghttp2
-rm -rf feeds/packages/utils/ttyd
-merge_package master https://github.com/immortalwrt/packages feeds/packages/utils utils/ttyd
+ rm -rf feeds/packages/net/{haproxy,msd_lite,curl}
+ merge_package master https://github.com/immortalwrt/packages feeds/packages/net net/haproxy net/msd_lite net/curl
+ rm -rf feeds/packages/net/{haproxy,msd_lite,socat}
+ merge_package master https://github.com/immortalwrt/packages feeds/packages/net net/haproxy net/msd_lite net/socat
+ rm -rf feeds/packages/libs/nghttp2
+ merge_package master https://github.com/immortalwrt/packages feeds/packages/libs libs/nghttp2
+ rm -rf feeds/packages/utils/ttyd
+ merge_package master https://github.com/immortalwrt/packages feeds/packages/utils utils/ttyd
 
 # libnghttp3 libngtcp2
 # merge_package master https://github.com/openwrt/packages feeds/packages/libs libs/nghttp3 libs/ngtcp2
