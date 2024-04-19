@@ -86,7 +86,7 @@ rm -rf feeds/packages/net/{haproxy,msd_lite,curl}
 merge_package master https://github.com/immortalwrt/packages feeds/packages/net net/haproxy net/msd_lite net/curl
 
 # libnghttp3 libngtcp2
-# merge_package master https://github.com/openwrt/packages feeds/packages/libs libs/nghttp3 libs/ngtcp2
+merge_package master https://github.com/openwrt/packages feeds/packages/libs libs/nghttp3 libs/ngtcp2
 
 # coremark
 rm -rf feeds/packages/utils/coremark
