@@ -1,6 +1,5 @@
 #!/bin/bash
 
-sed -i 's/luci/luci.git;openwrt-23.05/g' feeds.conf.default
 # 修改默认IP
 sed -i 's/192.168.1.1/10.0.0.1/g' package/base-files/files/bin/config_generate
 
@@ -78,7 +77,7 @@ git clone https://github.com/kxdn3/luci-app-pushbot package/luci-app-pushbot
 git clone https://github.com/WYC-2020/luci-app-dockerman package/applications/luci-app-dockerman
 git clone --depth=1 -b openwrt-18.06 https://github.com/tty228/luci-app-wechatpush package/luci-app-serverchan
 git clone https://github.com/lisaac/luci-app-diskman package/applications/luci-app-diskman
-git clone https://github.com/tty228/luci-app-wechatpush package/luci-app-wechatpush
+# git clone https://github.com/tty228/luci-app-wechatpush package/luci-app-wechatpush
 
 # 拉取immortalwrt仓库组件
 rm -rf feeds/packages/net/{haproxy,msd_lite,curl}
@@ -127,8 +126,8 @@ git clone --depth=1 https://github.com/xiaorouji/openwrt-passwall package/luci-a
  
 # Themes
 # git clone --depth=1 -b 18.06 https://github.com/kiddin9/luci-theme-edge package/luci-theme-edge
-git clone https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
-git clone --depth=1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
+# git clone https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
+# git clone --depth=1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
 # git clone --depth=1 https://github.com/xiaoqingfengATGH/luci-theme-infinityfreedom package/luci-theme-infinityfreedom
 # git_sparse_clone main https://github.com/haiibo/packages luci-theme-opentomcat
 git clone https://github.com/y9858/luci-theme-opentomcat package/luci-theme-opentomcat
