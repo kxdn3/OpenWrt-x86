@@ -77,6 +77,7 @@ git clone https://github.com/kxdn3/luci-app-pushbot package/luci-app-pushbot
 git clone https://github.com/WYC-2020/luci-app-dockerman package/applications/luci-app-dockerman
 git clone --depth=1 -b openwrt-18.06 https://github.com/tty228/luci-app-wechatpush package/luci-app-serverchan
 git clone https://github.com/lisaac/luci-app-diskman package/applications/luci-app-diskman
+git clone https://github.com/tty228/luci-app-wechatpush package/luci-app-wechatpush
 
 # 拉取immortalwrt仓库组件
 rm -rf feeds/packages/net/{haproxy,msd_lite,curl}
@@ -135,7 +136,7 @@ git clone https://github.com/y9858/luci-theme-opentomcat package/luci-theme-open
 # cp -f $GITHUB_WORKSPACE/images/bg1.jpg package/luci-theme-argon/htdocs/luci-static/argon/img/bg1.jpg
 
 # 更改默认主题
-sed -i 's/luci-theme-bootstrap/luci-theme-opentomcat/g' ./feeds/luci/collections/luci/Makefile
+# sed -i 's/luci-theme-bootstrap/luci-theme-opentomcat/g' ./feeds/luci/collections/luci/Makefile
 
 # SmartDNS
 git clone --depth=1 -b lede https://github.com/pymumu/luci-app-smartdns package/luci-app-smartdns
