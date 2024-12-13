@@ -89,8 +89,8 @@ git clone https://github.com/lisaac/luci-app-diskman package/applications/luci-a
 # git clone https://github.com/tty228/luci-app-wechatpush package/luci-app-wechatpush
 
 # 拉取immortalwrt仓库组件
-rm -rf feeds/packages/net/{haproxy,msd_lite,curl}
-merge_package master https://github.com/immortalwrt/packages feeds/packages/net net/haproxy net/msd_lite net/curl
+# rm -rf feeds/packages/net/{haproxy,msd_lite,curl}
+# merge_package master https://github.com/immortalwrt/packages feeds/packages/net net/haproxy net/msd_lite net/curl
 
 # libnghttp3 libngtcp2
 merge_package master https://github.com/openwrt/packages feeds/packages/libs libs/nghttp3 libs/ngtcp2
