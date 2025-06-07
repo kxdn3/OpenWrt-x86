@@ -60,6 +60,7 @@ jobs:
         sudo rm -rf /usr/local/share/chromium
         sudo rm -rf /usr/local/lib/android
         sudo rm -rf /usr/local/lib/node_modules
+        sudo rm -rf /etc/mysql /etc/php /usr/lib/jvm /usr/libexec/docker /usr/local /usr/src/* /var/lib/docker /var/lib/gems /var/lib/mysql /var/lib/snapd /etc/skel /opt/{microsoft,az,hostedtoolcache,cni,mssql-tools,pipx} /usr/share/{az*,dotnet,swift,miniconda,gradle*,java,kotlinc,ri,sbt} /root/{.sbt,.local,.npm}
     - name: Clone Source Code
       run: |
         df -hT $GITHUB_WORKSPACE
