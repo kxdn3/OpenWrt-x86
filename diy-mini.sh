@@ -1,8 +1,8 @@
 #!/bin/bash
 
 #切换23.05到18.06
-sed -i '/openwrt-24.10/d' feeds.conf.default
-sed -i 's/^#\(.*luci\)/\1/' feeds.conf.default
+# sed -i '/openwrt-23.05/d' feeds.conf.default
+# sed -i 's/^#\(.*luci\)/\1/' feeds.conf.default
 # sed -i 's/luci.git;openwrt-23.05/luci/g' feeds.conf.default
 
 # 修改默认IP
