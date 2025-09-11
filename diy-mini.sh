@@ -5,6 +5,11 @@
 # sed -i 's/^#\(.*luci\)/\1/' feeds.conf.default
 # sed -i 's/luci.git;openwrt-18.06/luci/g' feeds.conf.default
 
+# 注释掉 luci openwrt-23.05
+sed -i 's/^\(src-git luci https:\/\/github.com\/coolsnowwolf\/luci.git;openwrt-23.05\)/#\1/' feeds.conf.default
+
+# 取消注释 luci openwrt-24.10
+sed -i 's/^#src-git luci https:\/\/github.com\/coolsnowwolf\/luci.git;openwrt-24.10/src-git luci https:\/\/github.com\/coolsnowwolf\/luci.git;openwrt-24.10/' feeds.conf.default
 # 修改默认IP
 sed -i 's/192.168.1.1/10.0.0.1/g' package/base-files/files/bin/config_generate
 
