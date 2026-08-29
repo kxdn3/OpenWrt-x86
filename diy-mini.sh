@@ -1,9 +1,9 @@
 #!/bin/bash
 
 #切换23.05到18.06
-sed -i '/openwrt-23.05/d' feeds.conf.default
-sed -i 's/^#\(.*luci\)/\1/' feeds.conf.default
-sed -i 's/luci.git;openwrt-18.06/luci/g' feeds.conf.default
+sed -i '/^#\?src-git luci/d' feeds.conf.default
+echo "src-git luci https://github.com/coolsnowwolf/luci.git;openwrt-25.12" >> feeds.conf.default
+
 
 # 注释掉 luci openwrt-23.05
 sed -i 's/^\(src-git luci https:\/\/github.com\/coolsnowwolf\/luci.git;openwrt-23.05\)/#\1/' feeds.conf.default
