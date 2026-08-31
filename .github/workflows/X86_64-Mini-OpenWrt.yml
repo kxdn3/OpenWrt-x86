@@ -44,7 +44,6 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-       #docker rmi $(docker images -q)
         sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android $AGENT_TOOLSDIRECTORY
         sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
         sudo -E apt-get -y update
@@ -61,6 +60,7 @@ jobs:
         sudo rm -rf /usr/local/lib/android
         sudo rm -rf /usr/local/lib/node_modules
         sudo rm -rf /etc/mysql /etc/php /usr/lib/jvm /usr/libexec/docker /usr/local /usr/src/* /var/lib/docker /var/lib/gems /var/lib/mysql /var/lib/snapd /etc/skel /opt/{microsoft,az,hostedtoolcache,cni,mssql-tools,pipx} /usr/share/{az*,dotnet,swift,miniconda,gradle*,java,kotlinc,ri,sbt} /root/{.sbt,.local,.npm}
+
     - name: Clone Source Code
       run: |
         df -hT $GITHUB_WORKSPACE
@@ -172,14 +172,28 @@ jobs:
         token: ${{ secrets.GITHUB_TOKEN }}
         artifacts: ${{ env.FIRMWARE_PATH }}/*
         body: |
-          **This is OpenWrt Firmware for ${{ env.FIRMWARE_TAG }}**
+          **This is OpenWrt Firmware for ${{ env.FIRMWARE_TAG }} (Mini Edition)**
           ### 📒 固件信息
           - 💻 平台架构: ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
           - ⚽ 固件源码: ${{ env.REPO_URL }}
           - 💝 源码分支: ${{ env.REPO_BRANCH }}
+          - 🎨 LuCI 分支: openwrt-25.12
           - 🚀 内核版本: ${{ env.KERNEL }}
-          - 🌐 默认地址: 192.168.1.1
-          - 🔑 默认密码: password
+          - 🌐 默认地址: 10.0.0.1
+          - 🔑 默认密码: 无（首次登录需设置密码）
+          - 🐚 默认 Shell: zsh (oh-my-zsh)
+          ### 📦 预装插件
+          - 🔧 PassWall (科学上网)
+          - 🐳 DockerMan (Docker 管理)
+          - 💾 DiskMan (磁盘管理)
+          - 🍀 Lucky (DDNS/反向代理/端口转发)
+          - 📢 PushBot (消息推送)
+          - 📊 Nlbwmon (流量监控)
+          - 📁 Samba4 (文件共享，多通道)
+          - 🖥️ TTYD (Web 终端)
+          - 🔄 UPnP
+          - 📂 FileTransfer (文件传输)
+          - 🔗 ARP绑定
           ### 🧊 固件版本
           - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
           - ${{ env.COMMIT_AUTHOR }}
