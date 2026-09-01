@@ -163,14 +163,15 @@ find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's/PKG_SOURCE_URL:=@
 rm -rf feeds/luci/luci-app-msd_lite
 rm -rf feeds/luci/luci-app-smartdns
 # 全部 feeds 处理完成之后，再执行这条sed，并且增加文件存在判断
-LUCI_SYSTEM_LUA="feeds/luci/modules/luci-mod-system/luasrc/controller/admin/system.lua"
+LUCI_SYSTEM_LUA="feeds/luci/luci-mod-system/luasrc/controller/admin/system.lua"
 echo "检查文件路径: $LUCI_SYSTEM_LUA"
 if [ -f "$LUCI_SYSTEM_LUA" ]; then
-    echo "找到文件，执行sed修改时间格式"
-    sed -i 's/os.date("%c")/os.date("%Y-%m-%d %H:%M:%S")/g' "$LUCI_SYSTEM_LUA"
+  sed -i 's/os.date("%c")/os.date("%Y-%m-%d %H:%M:%S")/g' "$LUCI_SYSTEM_LUA"
+  echo "时间格式修改成功"
 else
-    echo "警告：未找到luci‑mod‑system system.lua，跳过时间修改，不中断编译"
+  echo "警告：未找到luci‑mod‑system system.lua，跳过时间修改，不中断编译"
 fi
+
 
 echo "=========================================="
 echo "  diy-mini.sh 执行完成"
