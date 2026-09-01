@@ -1,4 +1,4 @@
-#!/#!/bin/bash
+#!/bin/bash
 #
 # OpenWrt x86_64 Mini 自定义编译脚本
 # 源码基准: coolsnowwolf/lede (master)
