@@ -168,7 +168,7 @@ rm -rf feeds/packages/net/smartdns
 rm -rf feeds/luci/luci-app-msd_lite
 rm -rf feeds/luci/luci-app-smartdns
 
-.cd $OPENWRT_PATH
+cd $OPENWRT_PATH
 
 ./scripts/feeds update -a
 
