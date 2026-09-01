@@ -127,7 +127,7 @@ fi
 sed -i 's/${g}.*/${a}${b}${c}${d}${e}${f}${hydrid}/g' package/lean/autocore/files/x86/autocore
 # 修改本地时间格式
 sed -i 's#os.date()#os.date("%Y-%m-%d %H:%M:%S") .. " " .. translate(os.date("%A"))#g' package/lean/autocore/files/*/index.htm
-sed -i 's/os.date("%c")/os.date("%Y-%m-%d %H:%M:%S")/g' package/feeds/luci/luci-mod-admin-full/luasrc/controller/admin/system.lua
+sed -i 's/os.date("%c")/os.date("%Y-%m-%d %H:%M:%S")/g' feeds/luci/modules/luci-mod-system/luasrc/controller/admin/system.lua
 # 去除主页 LuCI 版本号显示
 sed -i 's/distversion)%>/distversion)%><!--/g' package/lean/autocore/files/*/index.htm
 sed -i 's/luciversion)%>)/luciversion)%>)-->/g' package/lean/autocore/files/*/index.htm
