@@ -159,6 +159,9 @@ find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's/PKG_SOURCE_URL:=@
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 
+# ↓↓在这里追加下面两行，删除luci界面包↓↓
+rm -rf feeds/luci/luci-app-msd_lite
+rm -rf feeds/luci/luci-app-smartdns
 # 全部 feeds 处理完成之后，再执行这条sed，并且增加文件存在判断
 LUCI_SYSTEM_LUA="feeds/luci/modules/luci-mod-system/luasrc/controller/admin/system.lua"
 echo "检查文件路径: $LUCI_SYSTEM_LUA"
