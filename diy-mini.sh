@@ -157,12 +157,20 @@ find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's/PKG_SOURCE_URL:=@
 find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's/PKG_SOURCE_URL:=@GHCODELOAD/PKG_SOURCE_URL:=https:\/\/codeload.github.com/g' {} \;
 # ========== 更新并安装 feeds（必须在添加第三方包后重新执行） ==========
 ./scripts/feeds update -a
-./scripts/feeds install -a
 
-# ↓↓在这里追加下面两行，删除luci界面包↓↓
+# 移除不需要包，必须在install‑a之前执行
+rm -rf feeds/packages/net/chinadns-ng
+rm -rf feeds/packages/net/sing-box
+rm -rf feeds/packages/net/xray-core
+rm -rf feeds/packages/net/mosdns
+rm -rf feeds/packages/net/msd_lite
+rm -rf feeds/packages/net/smartdns
 rm -rf feeds/luci/luci-app-msd_lite
 rm -rf feeds/luci/luci-app-smartdns
-# 全部 feeds 处理完成之后，再执行这条sed，并且增加文件存在判断
+
+./scripts/feeds install -a
+
+# 修改时间格式sed放这里
 LUCI_SYSTEM_LUA="feeds/luci/luci-mod-system/luasrc/controller/admin/system.lua"
 echo "检查文件路径: $LUCI_SYSTEM_LUA"
 if [ -f "$LUCI_SYSTEM_LUA" ]; then
@@ -171,7 +179,6 @@ if [ -f "$LUCI_SYSTEM_LUA" ]; then
 else
   echo "警告：未找到luci‑mod‑system system.lua，跳过时间修改，不中断编译"
 fi
-
 
 echo "=========================================="
 echo "  diy-mini.sh 执行完成"
