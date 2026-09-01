@@ -187,8 +187,8 @@ rm -rf feeds/luci/luci-app-smartdns
 
 ./scripts/feeds install -a
 
-# 修改系统页面时间格式，使用原始源码路径
-LUCI_SYSTEM_LUA="feeds/luci/luci-mod-system/luasrc/controller/admin/system.lua"
+# 修改系统页面时间格式，真实源码路径 package/feeds/luci
+LUCI_SYSTEM_LUA="package/feeds/luci/luci-mod-system/luasrc/controller/admin/system.lua"
 echo "检查文件路径: $LUCI_SYSTEM_LUA"
 if [ -f "$LUCI_SYSTEM_LUA" ]; then
   sed -i 's/os.date("%c")/os.date("%Y-%m-%d %H:%M:%S")/g' "$LUCI_SYSTEM_LUA"
@@ -196,6 +196,7 @@ if [ -f "$LUCI_SYSTEM_LUA" ]; then
 else
   echo "警告：未找到luci‑mod‑system system.lua，跳过时间修改，不中断编译"
 fi
+
 
 make defconfig
 
