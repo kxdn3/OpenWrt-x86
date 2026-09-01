@@ -88,7 +88,10 @@ git clone --depth=1 https://github.com/gdy666/luci-app-lucky.git package/lucky
 # PushBot (微信/Telegram 推送)
 git clone --depth=1 https://github.com/kxdn3/luci-app-pushbot package/luci-app-pushbot
 # DockerMan (Docker 管理)
-git clone --depth=1 https://github.com/WYC-2020/luci-app-dockerman package/applications/luci-app-dockerman
+git clone https://github.com/lisaac/luci-app-dockerman.git package/tmp-dockerman
+cp -r package/tmp-dockerman/applications/luci-app-dockerman package/
+rm -rf package/tmp-dockerman
+git clone https://github.com/lisaac/luci-lib-docker.git package/luci-lib-docker
 # DiskMan (磁盘管理)
 git clone --depth=1 https://github.com/lisaac/luci-app-diskman package/applications/luci-app-diskman
 # ========== 科学上网: PassWall ==========
