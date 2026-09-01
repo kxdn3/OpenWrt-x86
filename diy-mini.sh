@@ -68,13 +68,6 @@ function git_sparse_clone() {
     cd .. && rm -rf "$repodir"
 }
 # ========== 移除需要替换的 feeds 包 ==========
-# 科学上网相关核心（将由 passwall-packages 提供）
-rm -rf feeds/packages/net/chinadns-ng
-rm -rf feeds/packages/net/sing-box
-rm -rf feeds/packages/net/xray-core
-rm -rf feeds/packages/net/mosdns
-rm -rf feeds/packages/net/msd_lite
-rm -rf feeds/packages/net/smartdns
 # LuCI 应用（将由第三方仓库提供更新版本）
 rm -rf feeds/luci/themes/luci-theme-argon
 rm -rf feeds/luci/applications/luci-app-mosdns
@@ -186,17 +179,6 @@ rm -rf feeds/luci/luci-app-msd_lite
 rm -rf feeds/luci/luci-app-smartdns
 
 ./scripts/feeds install -a
-
-# 修改系统页面时间格式，真实源码路径 package/feeds/luci
-LUCI_SYSTEM_LUA="package/feeds/luci/luci-mod-system/luasrc/controller/admin/system.lua"
-echo "检查文件路径: $LUCI_SYSTEM_LUA"
-if [ -f "$LUCI_SYSTEM_LUA" ]; then
-  sed -i 's/os.date("%c")/os.date("%Y-%m-%d %H:%M:%S")/g' "$LUCI_SYSTEM_LUA"
-  echo "时间格式修改成功"
-else
-  echo "警告：未找到luci‑mod‑system system.lua，跳过时间修改，不中断编译"
-fi
-
 
 make defconfig
 
