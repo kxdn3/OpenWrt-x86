@@ -168,9 +168,26 @@ rm -rf feeds/packages/net/smartdns
 rm -rf feeds/luci/luci-app-msd_lite
 rm -rf feeds/luci/luci-app-smartdns
 
+.cd $OPENWRT_PATH
+
+./scripts/feeds update -a
+
+sleep 8
+
+# ========== 移除需要替换的 feeds 包 ==========
+# 科学上网相关核心（将由 passwall-packages 提供）
+rm -rf feeds/packages/net/chinadns-ng
+rm -rf feeds/packages/net/sing-box
+rm -rf feeds/packages/net/xray-core
+rm -rf feeds/packages/net/mosdns
+rm -rf feeds/packages/net/msd_lite
+rm -rf feeds/packages/net/smartdns
+rm -rf feeds/luci/luci-app-msd_lite
+rm -rf feeds/luci/luci-app-smartdns
+
 ./scripts/feeds install -a
 
-# 修改时间格式sed放这里
+# 修改系统页面时间格式，使用原始源码路径
 LUCI_SYSTEM_LUA="feeds/luci/luci-mod-system/luasrc/controller/admin/system.lua"
 echo "检查文件路径: $LUCI_SYSTEM_LUA"
 if [ -f "$LUCI_SYSTEM_LUA" ]; then
@@ -179,6 +196,15 @@ if [ -f "$LUCI_SYSTEM_LUA" ]; then
 else
   echo "警告：未找到luci‑mod‑system system.lua，跳过时间修改，不中断编译"
 fi
+
+make defconfig
+
+# autocore x86首页硬件信息依赖
+sed -i 's/^# CONFIG_BC is not set/CONFIG_BC=y/' .config
+sed -i 's/^# CONFIG_PCIUTILS is not set/CONFIG_PCIUTILS=y/' .config
+sed -i 's/^# CONFIG_LM_SENSORS is not set/CONFIG_LM_SENSORS=y/' .config
+make defconfig
+
 
 echo "=========================================="
 echo "  diy-mini.sh 执行完成"
