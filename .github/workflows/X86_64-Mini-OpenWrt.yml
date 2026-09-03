@@ -14,7 +14,8 @@ env:
   CACHE_TOOLCHAIN: true
   UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
-  FIRMWARE_TAG: X86_64
+  FIRMWARE_TAG: X86_64                    # 基础标签名称
+  RELEASE_TAG: X86_64-${{ github.run_number }}   # 动态标签（唯一）
   TZ: Asia/Shanghai
 
 jobs:
@@ -129,7 +130,14 @@ jobs:
         mkdir -p files/etc/uci-defaults
         cp $GITHUB_WORKSPACE/scripts/init-settings.sh files/etc/uci-defaults/99-init-settings
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        # 多线程编译，失败后单线程详细输出；若仍失败则退出
+        if ! make -j$(nproc); then
+          echo "多线程编译失败，尝试单线程..."
+          if ! make -j1; then
+            echo "单线程编译失败，输出详细日志..."
+            make -j1 V=s || exit 1
+          fi
+        fi
         echo "status=success" >> $GITHUB_OUTPUT
         echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
         echo "FILE_DATE=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
@@ -137,7 +145,7 @@ jobs:
     - name: Check Space Usage
       if: (!cancelled())
       run: df -hT
-      
+
     - name: Upload Bin Directory
       if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
       uses: actions/upload-artifact@main
@@ -166,9 +174,9 @@ jobs:
       if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
       uses: ncipollo/release-action@v1
       with:
-        name: R${{ env.DATE }} for ${{ env.FIRMWARE_TAG }}
-        allowUpdates: true
-        tag: ${{ env.FIRMWARE_TAG }}
+        name: R${{ env.DATE }} for ${{ env.FIRMWARE_TAG }} (Build #${{ github.run_number }})
+        tag: ${{ env.RELEASE_TAG }}           # 使用动态标签
+        allowUpdates: false                   # 新标签不会冲突，无需更新
         token: ${{ secrets.GITHUB_TOKEN }}
         artifacts: ${{ env.FIRMWARE_PATH }}/*
         body: |
@@ -200,3 +208,25 @@ jobs:
           - ${{ env.COMMIT_DATE }}
           - ${{ env.COMMIT_MESSAGE }}
           - ${{ env.COMMIT_HASH }}
+
+    - name: Cleanup Old Releases (Keep latest 5)
+      if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        echo "正在检查并清理旧版本（只保留最新 5 个）..."
+        # 获取所有以 "X86_64-" 开头的标签，按版本号排序（数字排序）
+        tags=$(git ls-remote --tags origin "refs/tags/${{ env.FIRMWARE_TAG }}-*" | awk -F'/' '{print $3}' | sort -V)
+        count=$(echo "$tags" | wc -l)
+        echo "当前匹配到的标签数量: $count"
+        keep=5
+        if [ $count -gt $keep ]; then
+          delete_count=$((count - keep))
+          echo "需要删除 $delete_count 个旧版本"
+          echo "$tags" | head -n $delete_count | while read tag; do
+            echo "正在删除旧 Release 和标签: $tag"
+            gh release delete "$tag" -y --cleanup-tag
+          done
+        else
+          echo "当前版本数不超过 $keep，无需清理"
+        fi
