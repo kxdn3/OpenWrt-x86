@@ -80,7 +80,7 @@ jobs:
           cp -r ${{ env.FIRMWARE_PATH }}/* ./firmware/
           echo "FIRMWARE_PATH=./firmware" >> $GITHUB_ENV
 
-   # ⭐ 生成唯一 Tag（日期 + 运行序号，强制北京时间）
+      # ⭐ 生成唯一 Tag（日期 + 运行序号，强制北京时间）
 - name: Set unique release tag
   if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
   id: tag
