@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# OpenWrt x86_64 Mini 自定义编译脚本（修复版）
+# OpenWrt x86_64 Mini 自定义编译脚本
 # 源码基准: coolsnowwolf/lede (master)
 # LuCI 分支: coolsnowwolf/luci (openwrt-25.12)
 # 内核版本: 6.12 (lede master 默认)
@@ -8,59 +8,36 @@
 set -e
 
 # ========== 基础配置 ==========
-# 获取脚本所在目录（OpenWrt 源码根目录）
-OPENWRT_PATH="$(cd "$(dirname "$0")" && pwd)"
-cd "$OPENWRT_PATH"
+OPENWRT_PATH="$PWD"  # 定义工作路径
 
-# 目标配置文件路径（用于时区等 uci 默认值修改）
+# ========== 目标配置文件路径 ==========
 CFG_FILE="package/base-files/files/bin/config_generate"
 
 # ========== LuCI 源切换 ==========
-# 修复：若 feeds.conf.default 缺失，尝试从示例复制
-if [ ! -f feeds.conf.default ]; then
-    if [ -f feeds.conf.default.example ]; then
-        cp feeds.conf.default.example feeds.conf.default
-        echo "已从 feeds.conf.default.example 恢复 feeds.conf.default"
-    else
-        echo "错误: 找不到 feeds.conf.default 或 feeds.conf.default.example，请检查源码完整性" >&2
-        exit 1
-    fi
-fi
-
 sed -i '/^#\?src-git luci/d' feeds.conf.default
 echo "src-git luci https://github.com/coolsnowwolf/luci.git;openwrt-25.12" >> feeds.conf.default
 
 # ========== 系统默认值修改 ==========
-# 修改默认 IP 为 10.0.0.1
 sed -i 's/192.168.1.1/10.0.0.1/g' package/base-files/files/bin/config_generate
 
-# 修改默认时区为 Asia/Shanghai (CST-8)
 if [ -f "$CFG_FILE" ]; then
     sed -i "s/timezone='.*'/timezone='CST-8'/g" "$CFG_FILE"
     sed -i "/timezone='CST-8'/a\\\t\t\set system.@system[-1].zonename='Asia/Shanghai'" "$CFG_FILE"
 fi
 
-# 更改默认 Shell 为 zsh
 sed -i 's/\/bin\/ash/\/usr\/bin\/zsh/g' package/base-files/files/etc/passwd
-
-# TTYD 免登录（注意：有安全风险，仅建议内网使用）
 sed -i 's|/bin/login|/bin/login -f root|g' feeds/packages/utils/ttyd/files/ttyd.config
 
 # ========== 镜像与内核配置 ==========
-# 更改 boot 分区大小为 1MB
 sed -i 's/GRUB_BOOT_PARTSIZE:=256/GRUB_BOOT_PARTSIZE:=1024/g' target/linux/x86/image/Makefile
 sed -i 's/GRUB_EFI_BOOT_PARTSIZE:=256/GRUB_EFI_BOOT_PARTSIZE:=1024/g' target/linux/x86/image/Makefile
-
-# 内核版本（显式声明，lede master 默认为 6.12）
 sed -i 's/KERNEL_PATCHVER:=.*/KERNEL_PATCHVER:=6.12/g' ./target/linux/x86/Makefile
 
-# 最大连接数修改为 65535
 if ! grep -q 'nf_conntrack_max' package/base-files/files/etc/sysctl.conf; then
     sed -i '/customized in this file/a net.netfilter.nf_conntrack_max=65535' package/base-files/files/etc/sysctl.conf
 fi
 
 # ========== 辅助函数定义 ==========
-# 从第三方仓库稀疏克隆指定文件夹到目标路径
 function merge_package() {
     if [[ $# -lt 3 ]]; then
         echo "Syntax error: [$#] [$*]" >&2
@@ -82,7 +59,6 @@ function merge_package() {
     cd "$rootdir"
 }
 
-# Git 稀疏克隆，只克隆指定目录到 package/
 function git_sparse_clone() {
     branch="$1" repourl="$2" && shift 2
     git clone --depth=1 -b "$branch" --single-branch --filter=blob:none --sparse "$repourl"
@@ -92,11 +68,7 @@ function git_sparse_clone() {
     cd .. && rm -rf "$repodir"
 }
 
-# ========== 更新 feeds 并准备 ==========
-# 先更新一次，以便后续删除 feeds 中的包
-./scripts/feeds update -a
-
-# ========== 移除需要替换的 feeds 包（在 update 后执行） ==========
+# ========== 移除需要替换的 feeds 包 ==========
 rm -rf feeds/luci/themes/luci-theme-argon
 rm -rf feeds/luci/applications/luci-app-mosdns
 rm -rf feeds/luci/applications/luci-app-netdata
@@ -104,57 +76,38 @@ rm -rf feeds/luci/applications/luci-app-pushbot
 rm -rf feeds/luci/applications/luci-app-dockerman
 rm -rf feeds/luci/applications/luci-app-diskman
 
-# 科学上网相关核心（将由 passwall-packages 提供）
-rm -rf feeds/packages/net/chinadns-ng
-rm -rf feeds/packages/net/sing-box
-rm -rf feeds/packages/net/xray-core
-rm -rf feeds/packages/net/mosdns
-rm -rf feeds/packages/net/msd_lite
-rm -rf feeds/packages/net/smartdns
-rm -rf feeds/luci/luci-app-msd_lite
-rm -rf feeds/luci/luci-app-smartdns
-
 # ========== 添加第三方插件 ==========
-# Lucky
 git clone --depth=1 https://github.com/gdy666/luci-app-lucky.git package/lucky
-
-# PushBot
 git clone --depth=1 https://github.com/kxdn3/luci-app-pushbot package/luci-app-pushbot
 
-# DockerMan
 git clone https://github.com/lisaac/luci-app-dockerman.git package/tmp-dockerman
 cp -r package/tmp-dockerman/applications/luci-app-dockerman package/
 rm -rf package/tmp-dockerman
 git clone https://github.com/lisaac/luci-lib-docker.git package/luci-lib-docker
 
-# DiskMan
 git clone --depth=1 https://github.com/lisaac/luci-app-diskman package/applications/luci-app-diskman
 
-# PassWall 依赖包
+# ========== 科学上网: PassWall ==========
 git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/openwrt-passwall-packages
-
-# PassWall LuCI 界面
 git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall package/luci-app-passwall
 
-# Argon 主题及配置
+# ========== 主题 ==========
 git clone --depth=1 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
 git clone --depth=1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
+sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' ./feeds/luci/collections/luci/Makefile
 
 # ========== 核心库与工具替换/升级 ==========
-# nghttp3 / ngtcp2
 merge_package master https://github.com/openwrt/packages feeds/packages/libs libs/nghttp3 libs/ngtcp2
 
-# coremark
 rm -rf feeds/packages/utils/coremark
 merge_package main https://github.com/sbwml/openwrt_pkgs feeds/packages/utils coremark
 
-# unzip
 rm -rf feeds/packages/utils/unzip
 git clone --depth=1 https://github.com/sbwml/feeds_packages_utils_unzip feeds/packages/utils/unzip
 
-# samba4
 rm -rf feeds/packages/net/samba4
 git clone --depth=1 https://github.com/sbwml/feeds_packages_net_samba4 feeds/packages/net/samba4
+
 if [ -f feeds/packages/net/samba4/files/smb.conf.template ]; then
     sed -i '/workgroup/a \\n\t## enable multi-channel' feeds/packages/net/samba4/files/smb.conf.template
     sed -i '/enable multi-channel/a \\tserver multi channel support = yes' feeds/packages/net/samba4/files/smb.conf.template
@@ -163,34 +116,22 @@ if [ -f feeds/packages/net/samba4/files/smb.conf.template ]; then
 fi
 
 # ========== 显示与信息优化 ==========
-# x86 型号只显示 CPU 型号
 sed -i 's/${g}.*/${a}${b}${c}${d}${e}${f}${hydrid}/g' package/lean/autocore/files/x86/autocore
-
-# 修改本地时间格式
 sed -i 's#os.date()#os.date("%Y-%m-%d %H:%M:%S") .. " " .. translate(os.date("%A"))#g' package/lean/autocore/files/*/index.htm
-
-# 去除主页 LuCI 版本号显示
 sed -i 's/distversion)%>/distversion)%><!--/g' package/lean/autocore/files/*/index.htm
 sed -i 's/luciversion)%>)/luciversion)%>)-->/g' package/lean/autocore/files/*/index.htm
 
 # ========== 版本与安全设置 ==========
-# 修改版本号为编译日期
 date_version=$(date +"%y.%m.%d")
 orig_version=$(grep DISTRIB_REVISION= package/lean/default-settings/files/zzz-default-settings | awk -F "'" '{print $2}')
 if [ -n "$orig_version" ]; then
-    # 使用 | 作为分隔符，避免版本号含 / 导致错误
-    sed -i "s|${orig_version}|R${date_version} by kxdn|g" package/lean/default-settings/files/zzz-default-settings
+    sed -i "s/${orig_version}/R${date_version} by kxdn/g" package/lean/default-settings/files/zzz-default-settings
 fi
-
-# 取消默认 root 密码：直接追加清空密码的命令（更可靠）
-# 注意：该文件是 Shell 脚本，追加在末尾会生效
-echo "sed -i '/^root:/d' /etc/shadow" >> package/lean/default-settings/files/zzz-default-settings
+sed -i '/\/etc\/shadow/{/root/d;}' package/lean/default-settings/files/zzz-default-settings
 
 # ========== 修复 hostapd 编译错误 ==========
-# 查找补丁文件（优先使用脚本同级的 scripts/ 目录）
-PATCH_FILE="$(dirname "$0")/scripts/011-fix-mbo-modules-build.patch"
-if [ -f "$PATCH_FILE" ]; then
-    cp -f "$PATCH_FILE" package/network/services/hostapd/patches/011-fix-mbo-modules-build.patch
+if [ -f "$GITHUB_WORKSPACE/scripts/011-fix-mbo-modules-build.patch" ]; then
+    cp -f "$GITHUB_WORKSPACE/scripts/011-fix-mbo-modules-build.patch" package/network/services/hostapd/patches/011-fix-mbo-modules-build.patch
 fi
 
 # ========== 修正第三方包 Makefile 路径问题 ==========
@@ -199,79 +140,181 @@ find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's|../../lang/golang
 find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's/PKG_SOURCE_URL:=@GHREPO/PKG_SOURCE_URL:=https:\/\/github.com/g' {} \;
 find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's/PKG_SOURCE_URL:=@GHCODELOAD/PKG_SOURCE_URL:=https:\/\/codeload.github.com/g' {} \;
 
-# ========== 设置默认主题为 argon（在 install 后修改，避免被覆盖） ==========
-# 注意：需要等 feeds install 之后再改，因此放在后面，但我们现在提前修改？实际上 install 会复制 feeds/luci/... 到 staging_dir，不会覆盖 feeds/ 目录，所以现在改也可以。
-# 但为安全，我们放在 install 之后（见下文）
-
-# ========== 再次更新并安装 feeds ==========
-# 因为添加了第三方包，需要更新索引，但已有一次 update，现在只需 install
-# 但为了保险，再次运行 update（但不再删除包，因为之前已删除）
+# ==========================================
+# ========== 统一执行 feeds 更新 ==========
+# ==========================================
+echo ">>> 更新 feeds..."
 ./scripts/feeds update -a
+
+# 统一移除不需要的包（合并重复操作）
+echo ">>> 移除冲突包（统一处理）..."
+REMOVE_PACKAGES=(
+    "feeds/packages/net/chinadns-ng"
+    "feeds/packages/net/sing-box"
+    "feeds/packages/net/xray-core"
+    "feeds/packages/net/mosdns"
+    "feeds/packages/net/msd_lite"
+    "feeds/packages/net/smartdns"
+    "feeds/luci/luci-app-msd_lite"
+    "feeds/luci/luci-app-smartdns"
+)
+
+for pkg in "${REMOVE_PACKAGES[@]}"; do
+    if [ -e "$pkg" ]; then
+        rm -rf "$pkg"
+        echo "  已移除: $pkg"
+    fi
+done
+
 ./scripts/feeds install -a
-
-# 修改默认主题（在 install 后执行，确保目标文件存在）
-if [ -f feeds/luci/collections/luci/Makefile ]; then
-    sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' feeds/luci/collections/luci/Makefile
-fi
-
-# ========== 配置编译选项 ==========
 make defconfig
+
+# ==========================================
+# ========== 优化后的驱动清理 ==========
+# ==========================================
 
 # autocore x86首页硬件信息依赖
 sed -i 's/^# CONFIG_BC is not set/CONFIG_BC=y/' .config
 sed -i 's/^# CONFIG_PCIUTILS is not set/CONFIG_PCIUTILS=y/' .config
 sed -i 's/^# CONFIG_LM_SENSORS is not set/CONFIG_LM_SENSORS=y/' .config
-
-# ========== 驱动精简（增强版） ==========
-echo ">>> 锁定 kmod-igc 驱动..."
-# 删除原有行，追加 =y
-sed -i '/CONFIG_PACKAGE_kmod-igc/d' .config
-echo "CONFIG_PACKAGE_kmod-igc=y" >> .config
-
-echo ">>> 删除无线驱动..."
-for pkg in kmod-cfg80211 kmod-mac80211 wpad hostapd iw; do
-    sed -i "/CONFIG_PACKAGE_${pkg}/d" .config
-done
-echo "# CONFIG_PACKAGE_kmod-cfg80211 is not set" >> .config
-echo "# CONFIG_PACKAGE_kmod-mac80211 is not set" >> .config
-
-echo ">>> 删除蓝牙驱动..."
-for pkg in kmod-bluetooth kmod-btusb kmod-ath3k kmod-bcmbt kmod-rtl_bt bluez; do
-    sed -i "/CONFIG_PACKAGE_${pkg}/d" .config
-done
-
-echo ">>> 删除非 Intel 网卡驱动..."
-for pkg in r816 8139 r8125 tg3 bnx2 sky2 pcnet32 via-forcedeth natsemi sis900 usb-net-; do
-    sed -i "/CONFIG_PACKAGE_kmod-${pkg}/d" .config
-done
-
-echo ">>> 删除非 Intel 显示驱动..."
-for pkg in drm-amdgpu nouveau; do
-    sed -i "/CONFIG_PACKAGE_kmod-${pkg}/d" .config
-done
-
-echo ">>> 删除蜂窝模块..."
-for pkg in mhi qmi usb-net-qmi; do
-    sed -i "/CONFIG_PACKAGE_kmod-${pkg}/d" .config
-done
-
-echo ">>> 深度清理冗余组件（NFS保留）..."
-for pkg in ata-piix pata- firewire- parport serial- i2c- gpio- spi- tokenring atm sound- alsa- video- media- mmc sdhci fs-isofs fs-udf input-touchscreen input-tablet thinkpad_acpi ideapad-laptop battery; do
-    sed -i "/CONFIG_PACKAGE_kmod-${pkg}/d" .config
-done
-# 网络调试工具
-for pkg in tcpdump strace gdb; do
-    sed -i "/CONFIG_PACKAGE_${pkg}/d" .config
-done
-
-echo ">>> 验证关键驱动保留情况："
-grep -E "CONFIG_PACKAGE_kmod-(igc|ahci|virtio)" .config || echo "注意：未找到 igc/ahci/virtio，请检查"
-
-# 再次执行 defconfig 使配置生效
 make defconfig
 
+# ========== 锁定关键驱动 ==========
+echo ">>> 锁定 kmod-igc 驱动..."
+sed -i 's/CONFIG_PACKAGE_kmod-igc=m/CONFIG_PACKAGE_kmod-igc=y/' .config
+sed -i 's/# CONFIG_PACKAGE_kmod-igc is not set/CONFIG_PACKAGE_kmod-igc=y/' .config
+grep -q "CONFIG_PACKAGE_kmod-igc=y" .config || echo "CONFIG_PACKAGE_kmod-igc=y" >> .config
+
+# ========== 批量清理驱动 ==========
+
+# 1. 无线驱动
+echo ">>> 清理无线驱动..."
+WIRELESS_DRIVERS="kmod-cfg80211 kmod-mac80211 wpad hostapd iw"
+for drv in $WIRELESS_DRIVERS; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+
+# 2. 蓝牙驱动
+echo ">>> 清理蓝牙驱动..."
+BLUETOOTH_DRIVERS="kmod-bluetooth kmod-btusb kmod-ath3k kmod-bcmbt kmod-rtl_bt bluez"
+for drv in $BLUETOOTH_DRIVERS; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+
+# 3. 非 Intel 网卡驱动
+echo ">>> 清理非 Intel 网卡驱动..."
+NON_INTEL_NICS="kmod-r816 kmod-8139too kmod-8139cp kmod-r8125 kmod-tg3 kmod-bnx2 kmod-sky2 kmod-pcnet32 kmod-via-rhine kmod-via-velocity kmod-forcedeth kmod-natsemi kmod-sis900"
+for drv in $NON_INTEL_NICS; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+sed -i '/CONFIG_PACKAGE_kmod-usb-net-/d' .config
+
+# 4. 非 Intel 显示驱动
+echo ">>> 清理非 Intel 显示驱动..."
+DISPLAY_DRIVERS="kmod-drm-amdgpu kmod-nouveau"
+for drv in $DISPLAY_DRIVERS; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+
+# 5. 蜂窝模块
+echo ">>> 清理蜂窝模块..."
+CELLULAR_DRIVERS="kmod-mhi kmod-qmi kmod-usb-net-qmi"
+for drv in $CELLULAR_DRIVERS; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+
+# 6. 老旧存储接口
+echo ">>> 清理老旧存储接口..."
+OLD_STORAGE="kmod-ata-piix"
+for drv in $OLD_STORAGE; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+sed -i '/CONFIG_PACKAGE_kmod-pata-/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-firewire-/d' .config
+
+# 7. 并口/串口
+echo ">>> 清理并口/串口..."
+PARALLEL_SERIAL="kmod-parport kmod-serial-8250 kmod-serial-core"
+for drv in $PARALLEL_SERIAL; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+sed -i '/CONFIG_PACKAGE_kmod-parport/d' .config
+
+# 8. GPIO/I2C/SPI
+echo ">>> 清理 GPIO/I2C/SPI..."
+sed -i '/CONFIG_PACKAGE_kmod-i2c-/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-gpio-/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-spi-/d' .config
+
+# 9. 网络调试工具
+echo ">>> 清理网络调试工具..."
+DEBUG_TOOLS="tcpdump strace gdb"
+for drv in $DEBUG_TOOLS; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+
+# 10. 老旧有线协议
+echo ">>> 清理老旧有线协议..."
+OLD_PROTOCOLS="kmod-tokenring kmod-atm"
+for drv in $OLD_PROTOCOLS; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+
+# 11. 音视频驱动
+echo ">>> 清理音视频驱动..."
+sed -i '/CONFIG_PACKAGE_kmod-sound-/d' .config
+sed -i '/CONFIG_PACKAGE_alsa-/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-video-/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-media-/d' .config
+
+# 12. MMC/SD 卡驱动
+echo ">>> 清理 MMC/SD 卡驱动..."
+MMC_SD="kmod-mmc kmod-sdhci"
+for drv in $MMC_SD; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+
+# 13. 光驱文件系统
+echo ">>> 清理光驱文件系统..."
+OPTICAL_FS="kmod-fs-isofs kmod-fs-udf"
+for drv in $OPTICAL_FS; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+
+# 14. 触摸屏/手写板
+echo ">>> 清理触摸屏/手写板..."
+TOUCH_INPUT="kmod-input-touchscreen kmod-input-tablet"
+for drv in $TOUCH_INPUT; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+
+# 15. 笔记本专用驱动
+echo ">>> 清理笔记本专用驱动..."
+LAPTOP_DRIVERS="kmod-thinkpad_acpi kmod-ideapad-laptop"
+for drv in $LAPTOP_DRIVERS; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+
+# 16. 电池驱动
+echo ">>> 清理电池驱动..."
+sed -i '/CONFIG_PACKAGE_kmod-battery/d' .config
+
+# ========== 验证关键驱动 ==========
+echo ""
+echo ">>> 验证关键驱动保留情况："
+CRITICAL_DRIVERS="kmod-igc kmod-ahci kmod-virtio"
+for drv in $CRITICAL_DRIVERS; do
+    if grep -q "CONFIG_PACKAGE_${drv}=y" .config; then
+        echo "  ✅ $drv 已启用"
+    else
+        echo "  ⚠️  $drv 未找到，请检查"
+    fi
+done
+
+echo ""
+echo ">>> 驱动精简完成！"
 echo "=========================================="
-echo "  diy-mini.sh 执行完成（修复版）"
+echo "  diy-mini.sh 执行完成"
 echo "  LuCI 分支: openwrt-25.12"
 echo "  内核版本: 6.12"
 echo "  默认 IP: 10.0.0.1"
