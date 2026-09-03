@@ -188,7 +188,83 @@ sed -i 's/^# CONFIG_PCIUTILS is not set/CONFIG_PCIUTILS=y/' .config
 sed -i 's/^# CONFIG_LM_SENSORS is not set/CONFIG_LM_SENSORS=y/' .config
 make defconfig
 
+# ========== 驱动精简（无线/蓝牙/非Intel网卡/显示/蜂窝） ==========
+echo ">>> 锁定 kmod-igc 驱动..."
+sed -i 's/CONFIG_PACKAGE_kmod-igc=m/CONFIG_PACKAGE_kmod-igc=y/' .config
+sed -i 's/# CONFIG_PACKAGE_kmod-igc is not set/CONFIG_PACKAGE_kmod-igc=y/' .config
+grep -q "CONFIG_PACKAGE_kmod-igc=y" .config || echo "CONFIG_PACKAGE_kmod-igc=y" >> .config
 
+echo ">>> 删除无线驱动..."
+sed -i 's/CONFIG_PACKAGE_kmod-cfg80211=y/# CONFIG_PACKAGE_kmod-cfg80211 is not set/' .config
+sed -i 's/CONFIG_PACKAGE_kmod-mac80211=y/# CONFIG_PACKAGE_kmod-mac80211 is not set/' .config
+sed -i '/CONFIG_PACKAGE_wpad/d' .config
+sed -i '/CONFIG_PACKAGE_hostapd/d' .config
+sed -i '/CONFIG_PACKAGE_iw/d' .config
+
+echo ">>> 删除蓝牙驱动..."
+sed -i 's/CONFIG_PACKAGE_kmod-bluetooth=y/# CONFIG_PACKAGE_kmod-bluetooth is not set/' .config
+sed -i 's/CONFIG_PACKAGE_kmod-btusb=y/# CONFIG_PACKAGE_kmod-btusb is not set/' .config
+sed -i '/CONFIG_PACKAGE_kmod-ath3k/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-bcmbt/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-rtl_bt/d' .config
+sed -i '/CONFIG_PACKAGE_bluez/d' .config
+
+echo ">>> 删除非 Intel 网卡驱动..."
+sed -i '/CONFIG_PACKAGE_kmod-r816/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-8139/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-r8125/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-tg3/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-bnx2/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-sky2/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-pcnet32/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-via-/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-forcedeth/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-natsemi/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-sis900/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-usb-net-/d' .config
+
+echo ">>> 删除非 Intel 显示驱动..."
+sed -i '/CONFIG_PACKAGE_kmod-drm-amdgpu/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-nouveau/d' .config
+
+echo ">>> 删除蜂窝模块..."
+sed -i '/CONFIG_PACKAGE_kmod-mhi/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-qmi/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-usb-net-qmi/d' .config
+
+echo ">>> 验证关键驱动保留情况："
+grep -E "CONFIG_PACKAGE_kmod-(igc|ahci|virtio)" .config || echo "注意：未找到 igc/ahci/virtio，请检查"
+echo ">>> 驱动精简完成！"
+# ========== 深度清理 x86 冗余组件（保留 NFS） ==========
+echo ">>> 深度清理 x86 冗余组件（NFS 已保留）..."
+
+# 1. 老旧存储接口 (IDE/PATA/火线) - 现代x86只用SATA/NVMe，这些纯属占位
+sed -i '/CONFIG_PACKAGE_kmod-ata-piix/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-pata-/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-firewire-/d' .config
+
+# 2. 并口/串口 (除非你接针脚调试，否则路由用不上)
+sed -i '/CONFIG_PACKAGE_kmod-parport/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-serial-8250/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-serial-core/d' .config
+
+# 3. GPIO/I2C/SPI (嵌入式玩物，x86软路由基本无传感器依赖)
+sed -i '/CONFIG_PACKAGE_kmod-i2c-/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-gpio-/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-spi-/d' .config
+
+# 4. NFS 已保留，不删除
+
+# 5. 网络抓包/调试工具 (生产环境路由不需要跑tcpdump/strace)
+sed -i '/CONFIG_PACKAGE_tcpdump/d' .config
+sed -i '/CONFIG_PACKAGE_strace/d' .config
+sed -i '/CONFIG_PACKAGE_gdb/d' .config
+
+# 6. 老旧有线协议 (Token Ring / FDDI / ATM，博物馆级别的网络)
+sed -i '/CONFIG_PACKAGE_kmod-tokenring/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-atm/d' .config
+
+echo ">>> 深度清理完成（NFS 已保留）！"
 echo "=========================================="
 echo "  diy-mini.sh 执行完成"
 echo "  LuCI 分支: openwrt-25.12"
