@@ -16,7 +16,17 @@ cd "$OPENWRT_PATH"
 CFG_FILE="package/base-files/files/bin/config_generate"
 
 # ========== LuCI 源切换 ==========
-# 删除原有 luci 源，切换到 openwrt-25.12 分支
+# 修复：若 feeds.conf.default 缺失，尝试从示例复制
+if [ ! -f feeds.conf.default ]; then
+    if [ -f feeds.conf.default.example ]; then
+        cp feeds.conf.default.example feeds.conf.default
+        echo "已从 feeds.conf.default.example 恢复 feeds.conf.default"
+    else
+        echo "错误: 找不到 feeds.conf.default 或 feeds.conf.default.example，请检查源码完整性" >&2
+        exit 1
+    fi
+fi
+
 sed -i '/^#\?src-git luci/d' feeds.conf.default
 echo "src-git luci https://github.com/coolsnowwolf/luci.git;openwrt-25.12" >> feeds.conf.default
 
