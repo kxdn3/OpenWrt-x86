@@ -1,59 +1,83 @@
 #!/bin/bash
-set -e  # 出错即停止
+set -e
 
 # 定义目标目录
 ROOT_FS_DIR="files/root"
 mkdir -p "$ROOT_FS_DIR"
 
-# 1. 安装 Oh My Zsh（使用镜像加速）
 pushd "$ROOT_FS_DIR" >/dev/null
 
-# 使用 Gitee 镜像（国内加速）
-# OMZ_REPO="https://gitee.com/mirrors/oh-my-zsh.git"
-# 或使用 GitHub 原版（如果你的网络好）
-OMZ_REPO="https://github.com/ohmyzsh/ohmyzsh.git"
-
-if [ ! -d ".oh-my-zsh" ]; then
-    git clone --depth=1 "$OMZ_REPO" ./.oh-my-zsh
-else
-    echo "Oh My Zsh already exists, skipping..."
+# ========== 1. 检测缓存 ==========
+if [ -d ".oh-my-zsh" ] && [ -f ".zshrc" ]; then
+    echo "✅ Oh My Zsh cache found, skipping installation"
+    popd >/dev/null
+    exit 0
 fi
 
-# 2. 安装插件（同样使用镜像）
+# ========== 2. 克隆 Oh My Zsh ==========
+echo "📥 Installing Oh My Zsh from GitHub..."
+
+# GitHub Actions 环境访问 GitHub 速度快，无需镜像
+git clone --depth=1 --single-branch \
+    https://github.com/ohmyzsh/ohmyzsh.git ./.oh-my-zsh
+
+# ========== 3. 安装插件（并行克隆加速） ==========
 PLUGIN_DIR="./.oh-my-zsh/custom/plugins"
 
-# 定义插件列表（镜像地址映射）
-declare -A PLUGINS=(
-    ["zsh-autosuggestions"]="https://gitee.com/zsh-users/zsh-autosuggestions.git"
-    ["zsh-syntax-highlighting"]="https://gitee.com/zsh-users/zsh-syntax-highlighting.git"
-    ["zsh-completions"]="https://gitee.com/zsh-users/zsh-completions.git"
-)
+echo "📥 Installing plugins from GitHub..."
 
-for plugin in "${!PLUGINS[@]}"; do
-    target_dir="$PLUGIN_DIR/$plugin"
-    if [ ! -d "$target_dir" ]; then
-        git clone --depth=1 "${PLUGINS[$plugin]}" "$target_dir"
-    else
-        echo "Plugin $plugin already exists, skipping..."
-    fi
-done
+# 并行克隆 3 个插件（后台运行）
+git clone --depth=1 --single-branch \
+    https://github.com/zsh-users/zsh-autosuggestions.git \
+    "$PLUGIN_DIR/zsh-autosuggestions" &
 
-# 3. 复制 .zshrc 配置
-ZSH_RC_SOURCE="${GITHUB_WORKSPACE:-.}/scripts/.zshrc"
-if [ -f "$ZSH_RC_SOURCE" ]; then
-    cp "$ZSH_RC_SOURCE" ./.zshrc
-else
-    echo "WARNING: .zshrc not found at $ZSH_RC_SOURCE, creating default..."
-    # 生成默认 .zshrc
-    cat > ./.zshrc << 'EOF'
-# 启用 Oh My Zsh
+git clone --depth=1 --single-branch \
+    https://github.com/zsh-users/zsh-syntax-highlighting.git \
+    "$PLUGIN_DIR/zsh-syntax-highlighting" &
+
+git clone --depth=1 --single-branch \
+    https://github.com/zsh-users/zsh-completions.git \
+    "$PLUGIN_DIR/zsh-completions" &
+
+wait  # 等待所有后台任务完成
+echo "✅ All plugins cloned"
+
+# ========== 4. 创建 .zshrc ==========
+echo "📝 Creating .zshrc..."
+
+cat > ./.zshrc << 'EOF'
+# Oh My Zsh 配置
 export ZSH="/root/.oh-my-zsh"
 ZSH_THEME="robbyrussell"
-plugins=(git zsh-autosuggestions zsh-syntax-highlighting zsh-completions)
+
+# 启用插件
+plugins=(
+    git
+    zsh-autosuggestions
+    zsh-syntax-highlighting
+    zsh-completions
+)
+
+# 自动补全配置
+autoload -U compinit && compinit
+
+# 加载 Oh My Zsh
 source $ZSH/oh-my-zsh.sh
+
+# 自定义别名
+alias ll='ls -alF'
+alias la='ls -A'
+alias l='ls -CF'
+alias ..='cd ..'
+alias ...='cd ../..'
+
+# 历史记录配置
+HISTSIZE=10000
+SAVEHIST=10000
+setopt HIST_IGNORE_ALL_DUPS
+setopt SHARE_HISTORY
 EOF
-fi
 
 popd >/dev/null
 
-echo "Zsh setup completed successfully!"
+echo "✅ Zsh setup completed successfully!"
