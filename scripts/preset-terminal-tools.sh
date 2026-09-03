@@ -9,9 +9,9 @@ mkdir -p "$ROOT_FS_DIR"
 pushd "$ROOT_FS_DIR" >/dev/null
 
 # 使用 Gitee 镜像（国内加速）
-OMZ_REPO="https://gitee.com/mirrors/oh-my-zsh.git"
+# OMZ_REPO="https://gitee.com/mirrors/oh-my-zsh.git"
 # 或使用 GitHub 原版（如果你的网络好）
-# OMZ_REPO="https://github.com/ohmyzsh/ohmyzsh.git"
+OMZ_REPO="https://github.com/ohmyzsh/ohmyzsh.git"
 
 if [ ! -d ".oh-my-zsh" ]; then
     git clone --depth=1 "$OMZ_REPO" ./.oh-my-zsh
