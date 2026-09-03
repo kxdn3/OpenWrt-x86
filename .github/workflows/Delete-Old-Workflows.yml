@@ -1,26 +1,28 @@
 name: Delete Old Workflows
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:                      # 手动触发
   schedule:
-    - cron: 0 3 * * *
+    - cron: '0 3 * * *'                  # 每天 UTC 3:00 自动运行
 
 jobs:
-  Cleaning:
+  cleaning:
     runs-on: ubuntu-22.04
 
     steps:
-    - name: Delete Old Workflows
-      uses: Mattraks/delete-workflow-runs@main
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        retain_days: 7
-        keep_minimum_runs: 0
+      # 删除超过 7 天的工作流运行记录，至少保留最近 5 条
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          retain_days: 7
+          keep_minimum_runs: 5            # 至少保留 5 条
 
-    - name: Delete Old Releases
-      uses: dev-drprasad/delete-older-releases@master
-      with:
-        keep_latest: 15
-        delete_tags: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # 删除旧 Release，只保留最新的 15 个，同时删除关联的 Git 标签
+      - name: Delete old releases
+        uses: Vucko130/delete-older-releases@v0.3.4
+        with:
+          keep_latest: 15
+          delete_tags: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
