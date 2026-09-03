@@ -263,7 +263,37 @@ sed -i '/CONFIG_PACKAGE_gdb/d' .config
 # 6. 老旧有线协议 (Token Ring / FDDI / ATM，博物馆级别的网络)
 sed -i '/CONFIG_PACKAGE_kmod-tokenring/d' .config
 sed -i '/CONFIG_PACKAGE_kmod-atm/d' .config
+# ========== 第三轮清理：音视频/SD卡/光驱/触摸屏（不影响键盘鼠标） ==========
+echo ">>> 第三轮清理：删除声卡、摄像头、SD卡、光驱、触摸屏..."
 
+# 1. 声卡驱动（路由不出声）
+sed -i '/CONFIG_PACKAGE_kmod-sound-/d' .config
+sed -i '/CONFIG_PACKAGE_alsa-/d' .config
+
+# 2. 摄像头/视频采集驱动（V4L2，路由不接摄像头）
+sed -i '/CONFIG_PACKAGE_kmod-video-/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-media-/d' .config
+
+# 3. MMC/SD 卡驱动（从 SATA/NVMe 启动，不需要）
+sed -i '/CONFIG_PACKAGE_kmod-mmc/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-sdhci/d' .config
+
+# 4. 光驱文件系统（不插光盘）
+sed -i '/CONFIG_PACKAGE_kmod-fs-isofs/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-fs-udf/d' .config
+
+# 5. 触摸屏/手写板（你用鼠标键盘，不是触屏）
+sed -i '/CONFIG_PACKAGE_kmod-input-touchscreen/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-input-tablet/d' .config
+
+# 6. 笔记本专用驱动（台式软路由没有）
+sed -i '/CONFIG_PACKAGE_kmod-thinkpad_acpi/d' .config
+sed -i '/CONFIG_PACKAGE_kmod-ideapad-laptop/d' .config
+
+# 7. 电池驱动（台式机无电池）
+sed -i '/CONFIG_PACKAGE_kmod-battery/d' .config
+
+echo ">>> 第三轮清理完成！"
 echo ">>> 深度清理完成（NFS 已保留）！"
 echo "=========================================="
 echo "  diy-mini.sh 执行完成"
