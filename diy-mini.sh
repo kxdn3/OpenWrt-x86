@@ -78,7 +78,7 @@ rm -rf feeds/luci/applications/luci-app-diskman
 
 # ========== 添加第三方插件 ==========
 git clone --depth=1 https://github.com/gdy666/luci-app-lucky.git package/lucky
-git clone --depth=1 https://github.com/kxdn3/luci-app-pushbot package/luci-app-pushbot
+git clone --depth=1 https://github.com/zzsj0928/luci-app-pushbot package/luci-app-pushbot
 
 git clone https://github.com/lisaac/luci-app-dockerman.git package/tmp-dockerman
 cp -r package/tmp-dockerman/applications/luci-app-dockerman package/
