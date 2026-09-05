@@ -157,6 +157,7 @@ REMOVE_PACKAGES=(
     "feeds/packages/net/smartdns"
     "feeds/luci/luci-app-msd_lite"
     "feeds/luci/luci-app-smartdns"
+    "feeds/helloworld/luci-app-ssr-plus"   # <--- 新增：消除依赖警告
 )
 
 for pkg in "${REMOVE_PACKAGES[@]}"; do
