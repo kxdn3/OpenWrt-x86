@@ -146,8 +146,11 @@ find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's/PKG_SOURCE_URL:=@
 echo ">>> 更新 feeds..."
 ./scripts/feeds update -a
 
-# 统一移除不需要的包（合并重复操作）
+# ==========================================
+# ========== 删除冲突包（路径修正 + 验证） ==========
+# ==========================================
 echo ">>> 移除冲突包（统一处理）..."
+
 REMOVE_PACKAGES=(
     "feeds/packages/net/chinadns-ng"
     "feeds/packages/net/sing-box"
@@ -155,20 +158,51 @@ REMOVE_PACKAGES=(
     "feeds/packages/net/mosdns"
     "feeds/packages/net/msd_lite"
     "feeds/packages/net/smartdns"
-    "feeds/luci/luci-app-msd_lite"
-    "feeds/luci/luci-app-smartdns"
-    "feeds/helloworld/luci-app-ssr-plus"   # <--- 新增：消除依赖警告
+    "feeds/luci/applications/luci-app-msd_lite"   # ✅ 修正路径
+    "feeds/luci/applications/luci-app-smartdns"   # ✅ 修正路径
+    "feeds/helloworld/luci-app-ssr-plus"
 )
 
 for pkg in "${REMOVE_PACKAGES[@]}"; do
     if [ -e "$pkg" ]; then
         rm -rf "$pkg"
-        echo "  已移除: $pkg"
+        echo "  ✅ 已移除: $pkg"
+    else
+        echo "  ⚠️ 未找到: $pkg（可能已被移除或不存在）"
     fi
 done
 
+# 二次扫描，防止有残留（如被安装到其他目录）
+echo ">>> 二次扫描删除可能残留的 luci-app-msd_lite / luci-app-smartdns ..."
+find feeds/luci -type d -name "luci-app-msd_lite" -exec rm -rf {} \; 2>/dev/null
+find feeds/luci -type d -name "luci-app-smartdns" -exec rm -rf {} \; 2>/dev/null
+
+# 验证是否真的删除
+echo ">>> 验证关键包是否已移除："
+for pkg in "luci-app-msd_lite" "luci-app-smartdns"; do
+    if find feeds/luci -type d -name "$pkg" | grep -q .; then
+        echo "  ❌ 警告：$pkg 仍然存在！"
+    else
+        echo "  ✅ $pkg 已成功删除"
+    fi
+done
+
+# 清理 .config 中残留的配置项
+echo ">>> 清理 .config 中相关配置..."
+sed -i '/CONFIG_PACKAGE_luci-app-msd_lite/d' .config 2>/dev/null
+sed -i '/CONFIG_PACKAGE_luci-app-smartdns/d' .config 2>/dev/null
+sed -i '/CONFIG_PACKAGE_msd_lite/d' .config 2>/dev/null
+sed -i '/CONFIG_PACKAGE_smartdns/d' .config 2>/dev/null
+
+# ==========================================
+# ========== 重新安装 feeds 并生成配置 ==========
+# ==========================================
 ./scripts/feeds install -a
 make defconfig
+
+# 最终检查 .config 是否还有残留（仅输出，不修改）
+echo ">>> 最终检查 .config 中是否残留相关配置..."
+grep -E "CONFIG_PACKAGE_(luci-app-msd_lite|luci-app-smartdns|msd_lite|smartdns)" .config || echo "  ✅ 无相关配置残留"
 
 # ==========================================
 # ========== 优化后的驱动清理 ==========
