@@ -593,7 +593,7 @@ make defconfig
 
 
 # ============================================================
-# 固件版本
+# 固件版本（修正分隔符）
 # ============================================================
 
 echo ">>> 设置固件版本"
@@ -614,11 +614,11 @@ OLD_VERSION=$(grep DISTRIB_REVISION "$VERSION_FILE" \
 
 if [ -n "$OLD_VERSION" ]; then
 
-
-sed -i \
-"s/${OLD_VERSION}/R${DATE_VERSION} by kxdn/g" \
-"$VERSION_FILE"
-
+    # 原 sed 命令使用 '/' 分隔符，可能因旧版本号包含 '/' 而失败
+    # 现改用 '|' 分隔符，避免冲突
+    sed -i \
+    "s|${OLD_VERSION}|R${DATE_VERSION} by kxdn|g" \
+    "$VERSION_FILE"
 
 fi
 
@@ -678,4 +678,3 @@ echo "Argon"
 echo "TTYD"
 echo
 echo "=========================================="
-
