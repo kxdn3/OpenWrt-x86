@@ -3,7 +3,7 @@ name: X86_64 Mini OpenWrt
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 18 * * *"
+    - cron: 0 18 * * *
 
 env:
   REPO_URL: https://github.com/coolsnowwolf/lede
@@ -12,6 +12,7 @@ env:
   DIY_SCRIPT: diy-mini.sh
   CLASH_KERNEL: amd64
   CACHE_TOOLCHAIN: true
+  UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
   FIRMWARE_TAG: X86_64
   RELEASE_TAG: X86_64-${{ github.run_number }}
@@ -22,193 +23,208 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-
     - name: 检出代码
-      uses: actions/checkout@v4
+      uses: actions/checkout@main
+
+    - name: 查看服务器性能
+      run: |
+        echo "警告⚠"
+        echo "分配的服务器性能有限，若选择的插件过多，务必注意CPU性能！"
+        echo -e "已知CPU型号(降序): 7763，8370C，8272CL，8171M，E5-2673\n"
+        echo "--------------------------CPU信息--------------------------"
+        echo "CPU物理数量: $(cat /proc/cpuinfo | grep "physical id" | sort | uniq | wc -l)"
+        echo "CPU核心数量: $(nproc)"
+        echo -e "CPU型号信息:$(cat /proc/cpuinfo | grep -m1 name | awk -F: '{print $2}')\n"
+        echo "--------------------------内存信息--------------------------"
+        echo "已安装内存详细信息:"
+        echo -e "$(sudo lshw -short -C memory | grep GiB)\n"
+        echo "--------------------------硬盘信息--------------------------"
+        echo "硬盘数量: $(ls /dev/sd* | grep -v [1-9] | wc -l)" && df -hT
 
     - name: 初始化环境
+      env:
+        DEBIAN_FRONTEND: noninteractive
       run: |
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /usr/share/dotnet
-        sudo apt-get update
-        sudo apt-get install -y rename
+        sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android $AGENT_TOOLSDIRECTORY
+        sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
+        sudo -E apt-get -y update
+        sudo -E apt-get -y install rename $(curl -fsSL is.gd/depends_ubuntu_2204)
+        sudo -E systemctl daemon-reload
+        sudo -E apt-get -y autoremove --purge
+        sudo -E apt-get -y clean
         sudo timedatectl set-timezone "$TZ"
+        sudo rm -rf /usr/share/dotnet/
+        sudo rm -rf /usr/local/graalvm/
+        sudo rm -rf /usr/local/.ghcup/
+        sudo rm -rf /usr/local/share/powershell
+        sudo rm -rf /usr/local/share/chromium
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /usr/local/lib/node_modules
+        sudo rm -rf /etc/mysql /etc/php /usr/lib/jvm /usr/libexec/docker /usr/local /usr/src/* /var/lib/docker /var/lib/gems /var/lib/mysql /var/lib/snapd /etc/skel /opt/{microsoft,az,hostedtoolcache,cni,mssql-tools,pipx} /usr/share/{az*,dotnet,swift,miniconda,gradle*,java,kotlinc,ri,sbt} /root/{.sbt,.local,.npm}
 
-    - name: 查看服务器信息
+    - name: 克隆源码
       run: |
-        echo "CPU:"
-        nproc
-        echo "MEM:"
-        free -h
-        echo "DISK:"
-        df -h
-
-    - name: 下载OpenWrt源码
-      run: |
-        git clone \
-        --depth=1 \
-        -b $REPO_BRANCH \
-        $REPO_URL \
-        openwrt
-
+        df -hT $GITHUB_WORKSPACE
+        git clone $REPO_URL -b $REPO_BRANCH openwrt
         cd openwrt
-
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
+        COMMIT_AUTHOR=$(git show -s --date=short --format="作者: %an")
+        echo "COMMIT_AUTHOR=$COMMIT_AUTHOR" >> $GITHUB_ENV
+        COMMIT_DATE=$(git show -s --date=short --format="时间: %ci")
+        echo "COMMIT_DATE=$COMMIT_DATE" >> $GITHUB_ENV
+        COMMIT_MESSAGE=$(git show -s --date=short --format="内容: %s")
+        echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
+        COMMIT_HASH=$(git show -s --date=short --format="hash: %H")
+        echo "COMMIT_HASH=$COMMIT_HASH" >> $GITHUB_ENV
 
-        echo "SOURCE_REPO=lede" >> $GITHUB_ENV
-
-        git log -1 --oneline
-
-
-    - name: 复制配置
+    - name: 生成变量
       run: |
         cp $CONFIG_FILE $OPENWRT_PATH/.config
-
         cd $OPENWRT_PATH
+        make defconfig > /dev/null 2>&1
+        SOURCE_REPO="$(echo $REPO_URL | awk -F '/' '{print $(NF)}')"
+        echo "SOURCE_REPO=$SOURCE_REPO" >> $GITHUB_ENV
+        DEVICE_TARGET=$(cat .config | grep CONFIG_TARGET_BOARD | awk -F '"' '{print $2}')
+        echo "DEVICE_TARGET=$DEVICE_TARGET" >> $GITHUB_ENV
+        DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}')
+        echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
 
-        make defconfig
-
-
-    - name: 缓存编译环境
+    - name: 缓存工具链
       if: env.CACHE_TOOLCHAIN == 'true'
       uses: HiGarfield/cachewrtbuild@main
       with:
         ccache: false
-        mixkey: lede-x86_64-${{ github.run_number }}
+        mixkey: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
         prefix: ${{ env.OPENWRT_PATH }}
 
-
-    - name: 更新Feeds
+    - name: 安装 Feeds
       run: |
         cd $OPENWRT_PATH
         ./scripts/feeds update -a
-
-
-    - name: 执行DIY脚本
-      run: |
-        cd $OPENWRT_PATH
-
-        chmod +x $GITHUB_WORKSPACE/$DIY_SCRIPT
-
-        $GITHUB_WORKSPACE/$DIY_SCRIPT
-
-
-    - name: 安装Feeds并生成配置
-      run: |
-        cd $OPENWRT_PATH
-
         ./scripts/feeds install -a
 
-        make defconfig
-
+    - name: 加载自定义配置
+      run: |
+        [ -e files ] && mv files $OPENWRT_PATH/files
+        [ -e $CONFIG_FILE ] && mv $CONFIG_FILE $OPENWRT_PATH/.config
+        chmod +x $GITHUB_WORKSPACE/scripts/*.sh
+        chmod +x $DIY_SCRIPT
+        cd $OPENWRT_PATH
+        $GITHUB_WORKSPACE/$DIY_SCRIPT
+        $GITHUB_WORKSPACE/scripts/preset-clash-core.sh $CLASH_KERNEL
+        $GITHUB_WORKSPACE/scripts/preset-terminal-tools.sh
+        $GITHUB_WORKSPACE/scripts/preset-adguard-core.sh $CLASH_KERNEL
 
     - name: 下载源码包
       run: |
         cd $OPENWRT_PATH
-
+        make defconfig
         make download -j8
-
-        find dl -size -1024c -delete
-
+        find dl -size -1024c -exec ls -l {} \;
+        find dl -size -1024c -exec rm -f {} \;
 
     - name: 编译固件
       id: compile
       run: |
         cd $OPENWRT_PATH
-
-        echo "开始编译"
-
+        mkdir -p files/etc/uci-defaults
+        cp $GITHUB_WORKSPACE/scripts/init-settings.sh files/etc/uci-defaults/99-init-settings
+        echo -e "$(nproc) 线程编译"
         if ! make -j$(nproc); then
-
-          echo "多线程失败，尝试单线程"
-
-          make -j1 V=s
-
+          echo "多线程编译失败，尝试单线程..."
+          if ! make -j1; then
+            echo "单线程编译失败，输出详细日志..."
+            make -j1 V=s || exit 1
+          fi
         fi
-
         echo "status=success" >> $GITHUB_OUTPUT
+        echo "DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
+        echo "FILE_DATE=$(date +"%Y.%m.%d")" >> $GITHUB_ENV
 
-        echo "DATE=$(date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+    - name: 检查磁盘空间
+      if: (!cancelled())
+      run: df -hT
 
-        echo "FILE_DATE=$(date '+%Y.%m.%d')" >> $GITHUB_ENV
+    - name: 上传 bin 目录
+      if: steps.compile.outputs.status == 'success' && env.UPLOAD_BIN_DIR == 'true'
+      uses: actions/upload-artifact@main
+      with:
+        name: ${{ env.SOURCE_REPO }}-bin-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}-${{ env.FILE_DATE }}
+        path: ${{ env.OPENWRT_PATH }}/bin
 
-
-    - name: 整理固件
+    - name: 整理固件文件
       if: steps.compile.outputs.status == 'success'
       run: |
         cd $OPENWRT_PATH/bin/targets/*/*
-
-        echo "KERNEL=$(grep '^kernel ' *.manifest | cut -d- -f2)" >> $GITHUB_ENV
-
-        rm -rf packages
-        rm -rf *.manifest
-        rm -rf *.buildinfo
-        rm -rf sha256sums
-        rm -rf profiles.json
-
+        cat config.buildinfo
+        echo "KERNEL=$(cat *.manifest | grep ^kernel | cut -d- -f2 | tr -d ' ')" >> $GITHUB_ENV
+        rm -rf packages *.buildinfo *.manifest *kernel.bin *rootfs.img.gz profiles.json sha256sums
         rename 's/^/mini-/' *
-
         echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
+    - name: 上传固件到 Artifact
+      if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE != 'true'
+      uses: actions/upload-artifact@main
+      with:
+        name: ${{ env.SOURCE_REPO }}-firmware-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}-${{ env.FILE_DATE }}
+        path: ${{ env.FIRMWARE_PATH }}
 
-    - name: 发布Release
-      if: steps.compile.outputs.status == 'success'
+    - name: 发布固件到 Release
+      if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
       uses: ncipollo/release-action@v1
       with:
-        name: OpenWrt Mini ${{ env.DATE }}
+        name: R${{ env.DATE }} for ${{ env.FIRMWARE_TAG }} (Build #${{ github.run_number }})
         tag: ${{ env.RELEASE_TAG }}
-        artifacts: ${{ env.FIRMWARE_PATH }}/*
+        allowUpdates: false
         token: ${{ secrets.GITHUB_TOKEN }}
-
+        artifacts: ${{ env.FIRMWARE_PATH }}/*
         body: |
-          ## OpenWrt x86_64 Mini
+          **这是适用于 ${{ env.FIRMWARE_TAG }} 的 OpenWrt 固件（迷你版）**
+          ### 📒 固件信息
+          - 💻 平台架构: ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
+          - ⚽ 固件源码: ${{ env.REPO_URL }}
+          - 💝 源码分支: ${{ env.REPO_BRANCH }}
+          - 🎨 LuCI 分支: openwrt-25.12
+          - 🚀 内核版本: ${{ env.KERNEL }}
+          - 🌐 默认地址: 10.0.0.1
+          - 🔑 默认密码: 无（首次登录需设置密码）
+          - 🐚 默认 Shell: zsh (oh-my-zsh)
+          ### 📦 预装插件
+          - 🔧 PassWall (科学上网)
+          - 🐳 DockerMan (Docker 管理)
+          - 💾 DiskMan (磁盘管理)
+          - 🍀 Lucky (DDNS/反向代理/端口转发)
+          - 📢 PushBot (消息推送)
+          - 📊 Nlbwmon (流量监控)
+          - 📁 Samba4 (文件共享，多通道)
+          - 🖥️ TTYD (Web 终端)
+          - 🔄 UPnP
+          - 📂 FileTransfer (文件传输)
+          - 🔗 ARP绑定
+          ### 🧊 固件版本
+          - 固件编译前最后一次➦[主源码](${{ env.REPO_URL }})更新记录
+          - ${{ env.COMMIT_AUTHOR }}
+          - ${{ env.COMMIT_DATE }}
+          - ${{ env.COMMIT_MESSAGE }}
+          - ${{ env.COMMIT_HASH }}
 
-          - 源码: ${{ env.REPO_URL }}
-          - 分支: ${{ env.REPO_BRANCH }}
-          - LuCI: openwrt-25.12
-          - Kernel: ${{ env.KERNEL }}
-          - IP: 10.0.0.1
-          - Rootfs: 2048MB
-
-          插件:
-          - PassWall
-          - DockerMan
-          - DiskMan
-          - Lucky
-          - PushBot
-          - Samba4
-          - Argon
-          - TTYD
-
-
-    - name: 清理旧Release
-      if: steps.compile.outputs.status == 'success'
+    - name: 清理旧 Release（仅保留最新 5 个）
+      if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
       env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-
-        keep=5
-
-        tags=$(gh release list \
-        --limit 100 \
-        --json tagName \
-        --jq '.[].tagName' | grep "^X86_64-" || true)
-
-
+        echo "正在检查并清理旧版本（只保留最新 5 个）..."
+        tags=$(git ls-remote --tags origin "refs/tags/${{ env.FIRMWARE_TAG }}-*" | awk -F'/' '{print $3}' | sort -V)
         count=$(echo "$tags" | wc -l)
-
-
-        if [ "$count" -gt "$keep" ]; then
-
-          echo "$tags" | head -n $((count-keep)) | while read tag
-
-          do
-
-            gh release delete "$tag" \
-            --yes \
-            --cleanup-tag
-
+        echo "当前匹配到的标签数量: $count"
+        keep=5
+        if [ $count -gt $keep ]; then
+          delete_count=$((count - keep))
+          echo "需要删除 $delete_count 个旧版本"
+          echo "$tags" | head -n $delete_count | while read tag; do
+            echo "正在删除旧 Release 和标签: $tag"
+            gh release delete "$tag" -y --cleanup-tag
           done
-
+        else
+          echo "当前版本数不超过 $keep，无需清理"
         fi
