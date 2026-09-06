@@ -1,357 +1,605 @@
 #!/bin/bash
 #
-# OpenWrt x86_64 Mini 自定义编译脚本
-# 源码基准: coolsnowwolf/lede (master)
-# LuCI 分支: coolsnowwolf/luci (openwrt-25.12)
-# 内核版本: 6.12 (lede master 默认)
+# OpenWrt x86_64 Mini AIO 固件 DIY
 #
+# 基准:
+#   源码: coolsnowwolf/lede master
+#   LuCI: openwrt-25.12
+#   Kernel: 6.12
+#
+# 功能:
+#   PassWall
+#   Docker
+#   Samba4
+#   DiskMan
+#   DockerMan
+#   Lucky
+#   Argon
+#
+# 适用:
+#   x86_64 小主机 / N100 / N5105 / J4125
+#
+
 set -e
 
-# ========== 基础配置 ==========
-OPENWRT_PATH="$PWD"  # 定义工作路径
+echo "=========================================="
+echo " OpenWrt x86_64 Mini DIY Start"
+echo "=========================================="
 
-# ========== 目标配置文件路径 ==========
-CFG_FILE="package/base-files/files/bin/config_generate"
+OPENWRT_PATH="$PWD"
 
-# ========== LuCI 源切换 ==========
-sed -i '/^#\?src-git luci/d' feeds.conf.default
-echo "src-git luci https://github.com/coolsnowwolf/luci.git;openwrt-25.12" >> feeds.conf.default
 
-# ========== 系统默认值修改 ==========
-sed -i 's/192.168.1.1/10.0.0.1/g' package/base-files/files/bin/config_generate
+# ============================================================
+# 基础检测
+# ============================================================
 
-if [ -f "$CFG_FILE" ]; then
-    sed -i "s/timezone='.*'/timezone='CST-8'/g" "$CFG_FILE"
-    sed -i "/timezone='CST-8'/a\\\t\t\set system.@system[-1].zonename='Asia/Shanghai'" "$CFG_FILE"
+echo ">>> 检查源码版本"
+
+if [ -f package/base-files/files/etc/openwrt_release ]; then
+    cat package/base-files/files/etc/openwrt_release
 fi
 
-sed -i 's/\/bin\/ash/\/usr\/bin\/zsh/g' package/base-files/files/etc/passwd
-sed -i 's|/bin/login|/bin/login -f root|g' feeds/packages/utils/ttyd/files/ttyd.config
+echo
 
-# ========== 镜像与内核配置 ==========
-sed -i 's/GRUB_BOOT_PARTSIZE:=256/GRUB_BOOT_PARTSIZE:=1024/g' target/linux/x86/image/Makefile
-sed -i 's/GRUB_EFI_BOOT_PARTSIZE:=256/GRUB_EFI_BOOT_PARTSIZE:=1024/g' target/linux/x86/image/Makefile
-sed -i 's/KERNEL_PATCHVER:=.*/KERNEL_PATCHVER:=6.12/g' ./target/linux/x86/Makefile
+echo ">>> 检查 Kernel"
 
-if ! grep -q 'nf_conntrack_max' package/base-files/files/etc/sysctl.conf; then
-    sed -i '/customized in this file/a net.netfilter.nf_conntrack_max=65535' package/base-files/files/etc/sysctl.conf
-fi
+grep KERNEL_PATCHVER target/linux/x86/Makefile || true
 
-# ========== 辅助函数定义 ==========
-function merge_package() {
-    if [[ $# -lt 3 ]]; then
-        echo "Syntax error: [$#] [$*]" >&2
-        return 1
+
+# ============================================================
+# 工具函数
+# ============================================================
+
+clone_package()
+{
+    local url="$1"
+    local dir="$2"
+
+    if [ -d "$dir" ]; then
+        echo "已存在: $dir"
+        return
     fi
-    trap 'rm -rf "$tmpdir"' EXIT
-    branch="$1" curl="$2" target_dir="$3" && shift 3
-    rootdir="$PWD"
-    localdir="$target_dir"
-    [ -d "$localdir" ] || mkdir -p "$localdir"
-    tmpdir="$(mktemp -d)" || exit 1
-    git clone -b "$branch" --depth 1 --filter=blob:none --sparse "$curl" "$tmpdir"
+
+    echo "Clone: $url"
+
+    git clone --depth=1 "$url" "$dir"
+}
+
+
+merge_package()
+{
+    if [ $# -lt 3 ]; then
+        echo "merge_package 参数错误"
+        exit 1
+    fi
+
+    local branch="$1"
+    local repo="$2"
+    local target="$3"
+
+    shift 3
+
+    local tmpdir
+
+    tmpdir=$(mktemp -d)
+
+    git clone \
+        -b "$branch" \
+        --depth=1 \
+        --filter=blob:none \
+        --sparse \
+        "$repo" \
+        "$tmpdir"
+
+
     cd "$tmpdir"
+
     git sparse-checkout init --cone
     git sparse-checkout set "$@"
-    for folder in "$@"; do
-        mv -f "$folder" "$rootdir/$localdir"
+
+    for item in "$@"; do
+        cp -rf "$item" "$OPENWRT_PATH/$target/"
     done
-    cd "$rootdir"
+
+
+    cd "$OPENWRT_PATH"
+
+    rm -rf "$tmpdir"
 }
 
-function git_sparse_clone() {
-    branch="$1" repourl="$2" && shift 2
-    git clone --depth=1 -b "$branch" --single-branch --filter=blob:none --sparse "$repourl"
-    repodir=$(echo "$repourl" | awk -F '/' '{print $(NF)}')
-    cd "$repodir" && git sparse-checkout set "$@"
-    mv -f "$@" ../package
-    cd .. && rm -rf "$repodir"
-}
 
-# ========== 移除需要替换的 feeds 包 ==========
+
+# ============================================================
+# LuCI 分支固定
+# ============================================================
+
+echo ">>> 设置 LuCI 25.12"
+
+sed -i '/^#\?src-git luci/d' feeds.conf.default
+
+echo "src-git luci https://github.com/coolsnowwolf/luci.git;openwrt-25.12" \
+>> feeds.conf.default
+
+
+
+# ============================================================
+# 系统默认设置
+# ============================================================
+
+echo ">>> 修改系统默认"
+
+CFG_FILE="package/base-files/files/bin/config_generate"
+
+
+if [ -f "$CFG_FILE" ]; then
+
+    sed -i \
+    's/192.168.1.1/10.0.0.1/g' \
+    "$CFG_FILE"
+
+
+    sed -i \
+    "s/timezone='.*'/timezone='CST-8'/g" \
+    "$CFG_FILE"
+
+
+    sed -i \
+    "/timezone='CST-8'/a\\
+        uci set system.@system[-1].zonename='Asia/Shanghai'
+    " \
+    "$CFG_FILE"
+
+fi
+
+
+
+# 默认shell
+
+sed -i \
+'s|/bin/ash|/usr/bin/zsh|g' \
+package/base-files/files/etc/passwd
+
+
+
+# ttyd 自动 root
+
+if [ -f feeds/packages/utils/ttyd/files/ttyd.config ]; then
+
+sed -i \
+'s|/bin/login|/bin/login -f root|g' \
+feeds/packages/utils/ttyd/files/ttyd.config
+
+fi
+
+
+
+# ============================================================
+# 镜像设置
+# ============================================================
+
+echo ">>> 设置 x86 镜像"
+
+sed -i \
+'s/GRUB_BOOT_PARTSIZE:=256/GRUB_BOOT_PARTSIZE:=1024/g' \
+target/linux/x86/image/Makefile
+
+
+sed -i \
+'s/GRUB_EFI_BOOT_PARTSIZE:=256/GRUB_EFI_BOOT_PARTSIZE:=1024/g' \
+target/linux/x86/image/Makefile
+
+
+
+# ============================================================
+# sysctl 网络优化
+# ============================================================
+
+SYSCTL_FILE="package/base-files/files/etc/sysctl.conf"
+
+
+if ! grep -q nf_conntrack_max "$SYSCTL_FILE"; then
+
+cat >> "$SYSCTL_FILE" <<EOF
+
+# Docker / 高连接数优化
+net.netfilter.nf_conntrack_max=65535
+
+EOF
+
+fi
+
+
+
+# ============================================================
+# 删除官方冲突插件
+# ============================================================
+
+echo ">>> 删除冲突 feeds"
+
 rm -rf feeds/luci/themes/luci-theme-argon
 rm -rf feeds/luci/applications/luci-app-mosdns
 rm -rf feeds/luci/applications/luci-app-netdata
-rm -rf feeds/luci/applications/luci-app-pushbot
 rm -rf feeds/luci/applications/luci-app-dockerman
 rm -rf feeds/luci/applications/luci-app-diskman
 
-# ========== 添加第三方插件 ==========
-git clone --depth=1 https://github.com/gdy666/luci-app-lucky.git package/lucky
-git clone --depth=1 https://github.com/zzsj0928/luci-app-pushbot package/luci-app-pushbot
 
-git clone https://github.com/lisaac/luci-app-dockerman.git package/tmp-dockerman
-cp -r package/tmp-dockerman/applications/luci-app-dockerman package/
+
+# ============================================================
+# 第三方插件
+# ============================================================
+
+echo ">>> 添加第三方插件"
+
+
+clone_package \
+https://github.com/gdy666/luci-app-lucky.git \
+package/lucky
+
+
+clone_package \
+https://github.com/zzsj0928/luci-app-pushbot \
+package/luci-app-pushbot
+
+
+
+# Dockerman
+
+if [ ! -d package/luci-app-dockerman ]; then
+
+git clone --depth=1 \
+https://github.com/lisaac/luci-app-dockerman.git \
+package/tmp-dockerman
+
+
+cp -rf \
+package/tmp-dockerman/applications/luci-app-dockerman \
+package/
+
+
 rm -rf package/tmp-dockerman
-git clone https://github.com/lisaac/luci-lib-docker.git package/luci-lib-docker
 
-git clone --depth=1 https://github.com/lisaac/luci-app-diskman package/applications/luci-app-diskman
+fi
 
-# ========== 科学上网: PassWall ==========
-git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall-packages package/openwrt-passwall-packages
-git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall package/luci-app-passwall
 
-# ========== 主题 ==========
-git clone --depth=1 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
-git clone --depth=1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
-sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' ./feeds/luci/collections/luci/Makefile
 
-# ========== 核心库与工具替换/升级 ==========
-merge_package master https://github.com/openwrt/packages feeds/packages/libs libs/nghttp3 libs/ngtcp2
+clone_package \
+https://github.com/lisaac/luci-lib-docker.git \
+package/luci-lib-docker
+
+
+
+clone_package \
+https://github.com/lisaac/luci-app-diskman \
+package/luci-app-diskman
+
+
+
+# PassWall
+
+clone_package \
+https://github.com/Openwrt-Passwall/openwrt-passwall-packages \
+package/openwrt-passwall-packages
+
+
+clone_package \
+https://github.com/Openwrt-Passwall/openwrt-passwall \
+package/luci-app-passwall
+
+
+
+# Argon
+
+clone_package \
+https://github.com/jerrykuku/luci-theme-argon \
+package/luci-theme-argon
+
+
+clone_package \
+https://github.com/jerrykuku/luci-app-argon-config \
+package/luci-app-argon-config
+
+
+sed -i \
+'s/luci-theme-bootstrap/luci-theme-argon/g' \
+feeds/luci/collections/luci/Makefile
+sed -i \
+'s/luci-theme-bootstrap/luci-theme-argon/g' \
+feeds/luci/collections/luci/Makefile
+
+
+# ============================================================
+# 软件包替换
+# ============================================================
+
+echo ">>> 替换核心软件包"
+
+
+# nghttp3 / ngtcp2
+
+merge_package \
+master \
+https://github.com/openwrt/packages \
+feeds/packages/libs \
+libs/nghttp3 \
+libs/ngtcp2
+
+
+
+# coremark
 
 rm -rf feeds/packages/utils/coremark
-merge_package main https://github.com/sbwml/openwrt_pkgs feeds/packages/utils coremark
+
+merge_package \
+main \
+https://github.com/sbwml/openwrt_pkgs \
+feeds/packages/utils \
+coremark
+
+
+
+# unzip
 
 rm -rf feeds/packages/utils/unzip
-git clone --depth=1 https://github.com/sbwml/feeds_packages_utils_unzip feeds/packages/utils/unzip
+
+clone_package \
+https://github.com/sbwml/feeds_packages_utils_unzip \
+feeds/packages/utils/unzip
+
+
+
+# samba4
 
 rm -rf feeds/packages/net/samba4
-git clone --depth=1 https://github.com/sbwml/feeds_packages_net_samba4 feeds/packages/net/samba4
+
+
+clone_package \
+https://github.com/sbwml/feeds_packages_net_samba4 \
+feeds/packages/net/samba4
+
+
 
 if [ -f feeds/packages/net/samba4/files/smb.conf.template ]; then
-    sed -i '/workgroup/a \\n\t## enable multi-channel' feeds/packages/net/samba4/files/smb.conf.template
-    sed -i '/enable multi-channel/a \\tserver multi channel support = yes' feeds/packages/net/samba4/files/smb.conf.template
-    sed -i 's/#aio read size = 0/aio read size = 1/g' feeds/packages/net/samba4/files/smb.conf.template
-    sed -i 's/#aio write size = 0/aio write size = 1/g' feeds/packages/net/samba4/files/smb.conf.template
+
+sed -i \
+'/workgroup/a\\
+## enable multi-channel' \
+feeds/packages/net/samba4/files/smb.conf.template
+
+
+sed -i \
+'/enable multi-channel/a\\
+server multi channel support = yes' \
+feeds/packages/net/samba4/files/smb.conf.template
+
+
+sed -i \
+'s/#aio read size = 0/aio read size = 1/g' \
+feeds/packages/net/samba4/files/smb.conf.template
+
+
+sed -i \
+'s/#aio write size = 0/aio write size = 1/g' \
+feeds/packages/net/samba4/files/smb.conf.template
+
 fi
 
-# ========== 显示与信息优化 ==========
-sed -i 's/${g}.*/${a}${b}${c}${d}${e}${f}${hydrid}/g' package/lean/autocore/files/x86/autocore
-sed -i 's#os.date()#os.date("%Y-%m-%d %H:%M:%S") .. " " .. translate(os.date("%A"))#g' package/lean/autocore/files/*/index.htm
-sed -i 's/distversion)%>/distversion)%><!--/g' package/lean/autocore/files/*/index.htm
-sed -i 's/luciversion)%>)/luciversion)%>)-->/g' package/lean/autocore/files/*/index.htm
 
-# ========== 版本与安全设置 ==========
-date_version=$(date +"%y.%m.%d")
-orig_version=$(grep DISTRIB_REVISION= package/lean/default-settings/files/zzz-default-settings | awk -F "'" '{print $2}')
-if [ -n "$orig_version" ]; then
-    sed -i "s/${orig_version}/R${date_version} by kxdn/g" package/lean/default-settings/files/zzz-default-settings
+
+# ============================================================
+# Autocore 信息优化
+# ============================================================
+
+echo ">>> 优化首页信息"
+
+
+sed -i \
+'s/${g}.*/${a}${b}${c}${d}${e}${f}${hydrid}/g' \
+package/lean/autocore/files/x86/autocore 2>/dev/null || true
+
+
+find package/lean/autocore/files \
+-name "index.htm" \
+-exec sed -i \
+'s/os.date()/os.date("%Y-%m-%d %H:%M:%S") .. " " .. translate(os.date("%A"))/g' {} \; 2>/dev/null || true
+
+
+
+# ============================================================
+# 固件版本
+# ============================================================
+
+echo ">>> 设置固件版本"
+
+
+DATE_VERSION=$(date +"%y.%m.%d")
+
+
+VERSION_FILE="package/lean/default-settings/files/zzz-default-settings"
+
+
+if [ -f "$VERSION_FILE" ]; then
+
+OLD_VERSION=$(grep DISTRIB_REVISION "$VERSION_FILE" | awk -F "'" '{print $2}')
+
+
+if [ -n "$OLD_VERSION" ]; then
+
+sed -i \
+"s/${OLD_VERSION}/R${DATE_VERSION} by kxdn/g" \
+"$VERSION_FILE"
+
 fi
-sed -i '/\/etc\/shadow/{/root/d;}' package/lean/default-settings/files/zzz-default-settings
 
-# ========== 修复 hostapd 编译错误 ==========
-if [ -f "$GITHUB_WORKSPACE/scripts/011-fix-mbo-modules-build.patch" ]; then
-    cp -f "$GITHUB_WORKSPACE/scripts/011-fix-mbo-modules-build.patch" package/network/services/hostapd/patches/011-fix-mbo-modules-build.patch
 fi
 
-# ========== 修正第三方包 Makefile 路径问题 ==========
-find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's|../../luci.mk|$(TOPDIR)/feeds/luci/luci.mk|g' {} \;
-find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's|../../lang/golang/golang-package.mk|$(TOPDIR)/feeds/packages/lang/golang/golang-package.mk|g' {} \;
-find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's/PKG_SOURCE_URL:=@GHREPO/PKG_SOURCE_URL:=https:\/\/github.com/g' {} \;
-find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's/PKG_SOURCE_URL:=@GHCODELOAD/PKG_SOURCE_URL:=https:\/\/codeload.github.com/g' {} \;
 
-# ==========================================
-# ========== 统一执行 feeds 更新 ==========
-# ==========================================
-echo ">>> 更新 feeds..."
-./scripts/feeds update -a
 
-# ==========================================
-# ========== 删除冲突包（路径修正 + 验证） ==========
-# ==========================================
-echo ">>> 移除冲突包（统一处理）..."
+# ============================================================
+# feeds 安装前处理
+# ============================================================
 
-REMOVE_PACKAGES=(
-    "feeds/packages/net/chinadns-ng"
-    "feeds/packages/net/sing-box"
-    "feeds/packages/net/xray-core"
-    "feeds/packages/net/mosdns"
-    "feeds/packages/net/msd_lite"
-    "feeds/packages/net/smartdns"
-    "feeds/luci/applications/luci-app-msd_lite"   # ✅ 修正路径
-    "feeds/luci/applications/luci-app-smartdns"   # ✅ 修正路径
-    "feeds/helloworld/luci-app-ssr-plus"
-)
+echo ">>> 修正第三方 Makefile"
 
-for pkg in "${REMOVE_PACKAGES[@]}"; do
-    if [ -e "$pkg" ]; then
-        rm -rf "$pkg"
-        echo "  ✅ 已移除: $pkg"
-    else
-        echo "  ⚠️ 未找到: $pkg（可能已被移除或不存在）"
-    fi
-done
 
-# 二次扫描，防止有残留（如被安装到其他目录）
-echo ">>> 二次扫描删除可能残留的 luci-app-msd_lite / luci-app-smartdns ..."
-find feeds/luci -type d -name "luci-app-msd_lite" -exec rm -rf {} \; 2>/dev/null
-find feeds/luci -type d -name "luci-app-smartdns" -exec rm -rf {} \; 2>/dev/null
+find package -name Makefile \
+-exec sed -i \
+'s|../../luci.mk|$(TOPDIR)/feeds/luci/luci.mk|g' {} \;
 
-# 验证是否真的删除
-echo ">>> 验证关键包是否已移除："
-for pkg in "luci-app-msd_lite" "luci-app-smartdns"; do
-    if find feeds/luci -type d -name "$pkg" | grep -q .; then
-        echo "  ❌ 警告：$pkg 仍然存在！"
-    else
-        echo "  ✅ $pkg 已成功删除"
-    fi
-done
 
-# 清理 .config 中残留的配置项
-echo ">>> 清理 .config 中相关配置..."
-sed -i '/CONFIG_PACKAGE_luci-app-msd_lite/d' .config 2>/dev/null
-sed -i '/CONFIG_PACKAGE_luci-app-smartdns/d' .config 2>/dev/null
-sed -i '/CONFIG_PACKAGE_msd_lite/d' .config 2>/dev/null
-sed -i '/CONFIG_PACKAGE_smartdns/d' .config 2>/dev/null
+find package -name Makefile \
+-exec sed -i \
+'s|../../lang/golang/golang-package.mk|$(TOPDIR)/feeds/packages/lang/golang/golang-package.mk|g' {} \;
 
-# ==========================================
-# ========== 重新安装 feeds 并生成配置 ==========
-# ==========================================
+
+
+# ============================================================
+# feeds 已由 workflow 更新
+# ============================================================
+
+echo ">>> feeds 已完成更新"
+
+
+
+# ============================================================
+# 安装 feeds
+# ============================================================
+
 ./scripts/feeds install -a
+
+
 make defconfig
 
-# 最终检查 .config 是否还有残留（仅输出，不修改）
-echo ">>> 最终检查 .config 中是否残留相关配置..."
-grep -E "CONFIG_PACKAGE_(luci-app-msd_lite|luci-app-smartdns|msd_lite|smartdns)" .config || echo "  ✅ 无相关配置残留"
 
-# ==========================================
-# ========== 优化后的驱动清理 ==========
-# ==========================================
 
-# autocore x86首页硬件信息依赖
-sed -i 's/^# CONFIG_BC is not set/CONFIG_BC=y/' .config
-sed -i 's/^# CONFIG_PCIUTILS is not set/CONFIG_PCIUTILS=y/' .config
-sed -i 's/^# CONFIG_LM_SENSORS is not set/CONFIG_LM_SENSORS=y/' .config
+# ============================================================
+# Docker 内核支持
+# ============================================================
+
+echo ">>> 添加 Docker 内核模块"
+
+
+DOCKER_MODULES="
+kmod-bridge
+kmod-veth
+kmod-nf-nat
+kmod-nf-conntrack
+kmod-nf-conntrack6
+kmod-ipt-nat
+kmod-ipt-extra
+"
+
+
+for mod in $DOCKER_MODULES
+do
+
+sed -i "/CONFIG_PACKAGE_${mod}/d" .config
+
+echo "CONFIG_PACKAGE_${mod}=y" >> .config
+
+done
+
+
+
+# ============================================================
+# x86 硬件驱动
+# ============================================================
+
+echo ">>> 固定 x86 驱动"
+
+
+X86_MODULES="
+kmod-igc
+kmod-e1000e
+kmod-ixgbe
+kmod-i40e
+kmod-ahci
+kmod-nvme
+kmod-virtio
+"
+
+
+for mod in $X86_MODULES
+do
+
+sed -i "/CONFIG_PACKAGE_${mod}/d" .config
+
+echo "CONFIG_PACKAGE_${mod}=y" >> .config
+
+done
+
+
+
+# ============================================================
+# IPv6
+# ============================================================
+
+echo ">>> IPv6 支持"
+
+
+IPV6_PACKAGES="
+odhcp6c
+odhcpd-ipv6only
+"
+
+
+for pkg in $IPV6_PACKAGES
+do
+
+sed -i "/CONFIG_PACKAGE_${pkg}/d" .config
+
+echo "CONFIG_PACKAGE_${pkg}=y" >> .config
+
+done
+
+
+
+# ============================================================
+# Samba 工具
+# ============================================================
+
+sed -i '/CONFIG_PACKAGE_samba4-utils/d' .config
+
+echo "CONFIG_PACKAGE_samba4-utils=y" >> .config
+
+
+
+# ============================================================
+# 删除无用镜像
+# ============================================================
+
+echo ">>> 删除 targz 镜像"
+
+
+sed -i '/CONFIG_TARGET_ROOTFS_TARGZ/d' .config
+
+echo "# CONFIG_TARGET_ROOTFS_TARGZ is not set" >> .config
+
+
+
+# ============================================================
+# 最终配置
+# ============================================================
+
 make defconfig
 
-# ========== 锁定关键驱动 ==========
-echo ">>> 锁定 kmod-igc 驱动..."
-sed -i 's/CONFIG_PACKAGE_kmod-igc=m/CONFIG_PACKAGE_kmod-igc=y/' .config
-sed -i 's/# CONFIG_PACKAGE_kmod-igc is not set/CONFIG_PACKAGE_kmod-igc=y/' .config
-grep -q "CONFIG_PACKAGE_kmod-igc=y" .config || echo "CONFIG_PACKAGE_kmod-igc=y" >> .config
 
-# ========== 批量清理驱动 ==========
-
-# 1. 无线驱动
-echo ">>> 清理无线驱动..."
-WIRELESS_DRIVERS="kmod-cfg80211 kmod-mac80211 wpad hostapd iw"
-for drv in $WIRELESS_DRIVERS; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-
-# 2. 蓝牙驱动
-echo ">>> 清理蓝牙驱动..."
-BLUETOOTH_DRIVERS="kmod-bluetooth kmod-btusb kmod-ath3k kmod-bcmbt kmod-rtl_bt bluez"
-for drv in $BLUETOOTH_DRIVERS; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-
-# 3. 非 Intel 网卡驱动
-echo ">>> 清理非 Intel 网卡驱动..."
-NON_INTEL_NICS="kmod-r816 kmod-8139too kmod-8139cp kmod-r8125 kmod-tg3 kmod-bnx2 kmod-sky2 kmod-pcnet32 kmod-via-rhine kmod-via-velocity kmod-forcedeth kmod-natsemi kmod-sis900"
-for drv in $NON_INTEL_NICS; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-sed -i '/CONFIG_PACKAGE_kmod-usb-net-/d' .config
-
-# 4. 非 Intel 显示驱动
-echo ">>> 清理非 Intel 显示驱动..."
-DISPLAY_DRIVERS="kmod-drm-amdgpu kmod-nouveau"
-for drv in $DISPLAY_DRIVERS; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-
-# 5. 蜂窝模块
-echo ">>> 清理蜂窝模块..."
-CELLULAR_DRIVERS="kmod-mhi kmod-qmi kmod-usb-net-qmi"
-for drv in $CELLULAR_DRIVERS; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-
-# 6. 老旧存储接口
-echo ">>> 清理老旧存储接口..."
-OLD_STORAGE="kmod-ata-piix"
-for drv in $OLD_STORAGE; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-sed -i '/CONFIG_PACKAGE_kmod-pata-/d' .config
-sed -i '/CONFIG_PACKAGE_kmod-firewire-/d' .config
-
-# 7. 并口/串口
-echo ">>> 清理并口/串口..."
-PARALLEL_SERIAL="kmod-parport kmod-serial-8250 kmod-serial-core"
-for drv in $PARALLEL_SERIAL; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-sed -i '/CONFIG_PACKAGE_kmod-parport/d' .config
-
-# 8. GPIO/I2C/SPI
-echo ">>> 清理 GPIO/I2C/SPI..."
-sed -i '/CONFIG_PACKAGE_kmod-i2c-/d' .config
-sed -i '/CONFIG_PACKAGE_kmod-gpio-/d' .config
-sed -i '/CONFIG_PACKAGE_kmod-spi-/d' .config
-
-# 9. 网络调试工具
-echo ">>> 清理网络调试工具..."
-DEBUG_TOOLS="tcpdump strace gdb"
-for drv in $DEBUG_TOOLS; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-
-# 10. 老旧有线协议
-echo ">>> 清理老旧有线协议..."
-OLD_PROTOCOLS="kmod-tokenring kmod-atm"
-for drv in $OLD_PROTOCOLS; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-
-# 11. 音视频驱动
-echo ">>> 清理音视频驱动..."
-sed -i '/CONFIG_PACKAGE_kmod-sound-/d' .config
-sed -i '/CONFIG_PACKAGE_alsa-/d' .config
-sed -i '/CONFIG_PACKAGE_kmod-video-/d' .config
-sed -i '/CONFIG_PACKAGE_kmod-media-/d' .config
-
-# 12. MMC/SD 卡驱动
-echo ">>> 清理 MMC/SD 卡驱动..."
-MMC_SD="kmod-mmc kmod-sdhci"
-for drv in $MMC_SD; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-
-# 13. 光驱文件系统
-echo ">>> 清理光驱文件系统..."
-OPTICAL_FS="kmod-fs-isofs kmod-fs-udf"
-for drv in $OPTICAL_FS; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-
-# 14. 触摸屏/手写板
-echo ">>> 清理触摸屏/手写板..."
-TOUCH_INPUT="kmod-input-touchscreen kmod-input-tablet"
-for drv in $TOUCH_INPUT; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-
-# 15. 笔记本专用驱动
-echo ">>> 清理笔记本专用驱动..."
-LAPTOP_DRIVERS="kmod-thinkpad_acpi kmod-ideapad-laptop"
-for drv in $LAPTOP_DRIVERS; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
-done
-
-# 16. 电池驱动
-echo ">>> 清理电池驱动..."
-sed -i '/CONFIG_PACKAGE_kmod-battery/d' .config
-
-# ========== 验证关键驱动 ==========
-echo ""
-echo ">>> 验证关键驱动保留情况："
-CRITICAL_DRIVERS="kmod-igc kmod-ahci kmod-virtio"
-for drv in $CRITICAL_DRIVERS; do
-    if grep -q "CONFIG_PACKAGE_${drv}=y" .config; then
-        echo "  ✅ $drv 已启用"
-    else
-        echo "  ⚠️  $drv 未找到，请检查"
-    fi
-done
-
-echo ""
-echo ">>> 驱动精简完成！"
+echo
 echo "=========================================="
-echo "  diy-mini.sh 执行完成"
-echo "  LuCI 分支: openwrt-25.12"
-echo "  内核版本: 6.12"
-echo "  默认 IP: 10.0.0.1"
-echo "  默认主题: argon"
+echo " DIY 完成"
+echo
+echo "平台:"
+grep CONFIG_TARGET_BOARD .config
+echo
+echo "Kernel:"
+grep KERNEL_PATCHVER target/linux/x86/Makefile
+echo
+echo "Rootfs:"
+grep CONFIG_TARGET_ROOTFS_PARTSIZE .config
+echo
+echo "Docker:"
+grep CONFIG_PACKAGE_dockerd .config
+echo
+echo "PassWall:"
+grep CONFIG_PACKAGE_luci-app-passwall .config
+echo
 echo "=========================================="
