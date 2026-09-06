@@ -1,677 +1,214 @@
 name: X86_64 Mini OpenWrt
 
-
 on:
   workflow_dispatch:
-
   schedule:
     - cron: "0 18 * * *"
 
-
-
 env:
-
   REPO_URL: https://github.com/coolsnowwolf/lede
-
   REPO_BRANCH: master
-
   CONFIG_FILE: configs/x86_64-mini.config
-
   DIY_SCRIPT: diy-mini.sh
-
-
   CLASH_KERNEL: amd64
-
-
   CACHE_TOOLCHAIN: true
-
-  UPLOAD_BIN_DIR: false
-
-
   FIRMWARE_RELEASE: true
-
-
   FIRMWARE_TAG: X86_64
-
-
-  RELEASE_TAG:
-    X86_64-${{ github.run_number }}
-
-
+  RELEASE_TAG: X86_64-${{ github.run_number }}
   TZ: Asia/Shanghai
 
-
-
-
 jobs:
-
-
   Build:
-
-
     runs-on: ubuntu-22.04
-
-
 
     steps:
 
-
-
-    # ====================================================
-    # Checkout
-    # ====================================================
-
-
     - name: 检出代码
-
       uses: actions/checkout@v4
 
-
-
-
-
-    # ====================================================
-    # 环境初始化
-    # ====================================================
-
-
     - name: 初始化环境
-
-      env:
-
-        DEBIAN_FRONTEND: noninteractive
-
-
       run: |
-
-
-        sudo rm -rf \
-        /usr/share/dotnet \
-        /usr/local/lib/android \
-        /opt/hostedtoolcache
-
-
-
-        sudo -E apt-get update
-
-
-
-        sudo -E apt-get install -y \
-        rename \
-        build-essential \
-        jq
-
-
-
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /usr/share/dotnet
+        sudo apt-get update
+        sudo apt-get install -y rename
         sudo timedatectl set-timezone "$TZ"
 
-
-
-        df -hT
-
-
-
-
-
-    # ====================================================
-    # 下载源码
-    # ====================================================
-
-
-    - name: 克隆 OpenWrt源码
-
-
+    - name: 查看服务器信息
       run: |
+        echo "CPU:"
+        nproc
+        echo "MEM:"
+        free -h
+        echo "DISK:"
+        df -h
 
-
+    - name: 下载OpenWrt源码
+      run: |
         git clone \
-        $REPO_URL \
+        --depth=1 \
         -b $REPO_BRANCH \
+        $REPO_URL \
         openwrt
-
-
 
         cd openwrt
 
-
-
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
 
+        echo "SOURCE_REPO=lede" >> $GITHUB_ENV
+
+        git log -1 --oneline
 
 
-        echo "COMMIT_HASH=$(git rev-parse HEAD)" >> $GITHUB_ENV
-
-
-        echo "COMMIT_MESSAGE=$(git log -1 --pretty=%s)" >> $GITHUB_ENV
-
-
-
-        echo "COMMIT_AUTHOR=$(git log -1 --pretty=%an)" >> $GITHUB_ENV
-
-
-
-        echo "COMMIT_DATE=$(git log -1 --date=short --pretty=%ci)" >> $GITHUB_ENV
-
-
-
-
-
-    # ====================================================
-    # 加载配置
-    # ====================================================
-
-
-    - name: 加载配置
-
-
+    - name: 复制配置
       run: |
-
-
-        cp \
-        $CONFIG_FILE \
-        $OPENWRT_PATH/.config
-
-
+        cp $CONFIG_FILE $OPENWRT_PATH/.config
 
         cd $OPENWRT_PATH
-
-
 
         make defconfig
 
 
-
-
-
-    # ====================================================
-    # 获取设备信息
-    # ====================================================
-
-
-    - name: 生成变量
-
-
-      run: |
-
-
-        cd $OPENWRT_PATH
-
-
-
-        echo \
-        "DEVICE_TARGET=$(grep CONFIG_TARGET_BOARD .config | cut -d '"' -f2)" \
-        >> $GITHUB_ENV
-
-
-
-        echo \
-        "DEVICE_SUBTARGET=$(grep CONFIG_TARGET_SUBTARGET .config | cut -d '"' -f2)" \
-        >> $GITHUB_ENV
-
-
-
-
-
-    # ====================================================
-    # 缓存
-    # ====================================================
-
-
-    - name: 缓存工具链
-
-
+    - name: 缓存编译环境
       if: env.CACHE_TOOLCHAIN == 'true'
-
-
       uses: HiGarfield/cachewrtbuild@main
-
-
       with:
+        ccache: false
+        mixkey: lede-x86_64-${{ github.run_number }}
+        prefix: ${{ env.OPENWRT_PATH }}
 
 
-        ccache: true
-
-
-        mixkey:
-          ${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
-
-
-        prefix:
-          ${{ env.OPENWRT_PATH }}
-
-
-
-
-
-
-    # ====================================================
-    # feeds
-    # ====================================================
-
-
-    - name: 更新 feeds
-
-
+    - name: 更新Feeds
       run: |
-
-
         cd $OPENWRT_PATH
-
-
-
         ./scripts/feeds update -a
 
 
-
-        ./scripts/feeds install -a
-
-
-
-
-
-
-    # ====================================================
-    # DIY
-    # ====================================================
-
-
-    - name: 执行 DIY
-
-
+    - name: 执行DIY脚本
       run: |
-
-
-        chmod +x $GITHUB_WORKSPACE/$DIY_SCRIPT
-
-
-
         cd $OPENWRT_PATH
 
-
+        chmod +x $GITHUB_WORKSPACE/$DIY_SCRIPT
 
         $GITHUB_WORKSPACE/$DIY_SCRIPT
 
 
-
-
-
-
-    # ====================================================
-    # 下载源码包
-    # ====================================================
-
-
-    - name: 下载软件包
-
-
+    - name: 安装Feeds并生成配置
       run: |
-
-
         cd $OPENWRT_PATH
 
-
+        ./scripts/feeds install -a
 
         make defconfig
 
 
+    - name: 下载源码包
+      run: |
+        cd $OPENWRT_PATH
 
         make download -j8
-
-
 
         find dl -size -1024c -delete
 
 
-
-
-
-
-    # ====================================================
-    # 编译
-    # ====================================================
-
-
     - name: 编译固件
-
-
       id: compile
-
-
       run: |
-
-
         cd $OPENWRT_PATH
 
-
-
-        echo "CPU线程:"
-        nproc
-
-
+        echo "开始编译"
 
         if ! make -j$(nproc); then
 
-
           echo "多线程失败，尝试单线程"
-
-
 
           make -j1 V=s
 
-
-
         fi
-
-
 
         echo "status=success" >> $GITHUB_OUTPUT
 
+        echo "DATE=$(date '+%Y-%m-%d %H:%M:%S')" >> $GITHUB_ENV
+
+        echo "FILE_DATE=$(date '+%Y.%m.%d')" >> $GITHUB_ENV
 
 
-        echo \
-        "DATE=$(date '+%Y-%m-%d %H:%M:%S')" \
-        >> $GITHUB_ENV
-                echo \
-        "FILE_DATE=$(date '+%Y.%m.%d')" \
-        >> $GITHUB_ENV
-
-
-
-
-
-    # ====================================================
-    # 空间检查
-    # ====================================================
-
-
-    - name: 检查磁盘空间
-
-
-      if: (!cancelled())
-
-
-      run: |
-
-
-        df -hT
-
-
-
-
-
-
-    # ====================================================
-    # 整理固件
-    # ====================================================
-
-
-    - name: 整理固件文件
-
-
+    - name: 整理固件
       if: steps.compile.outputs.status == 'success'
-
-
       run: |
-
-
         cd $OPENWRT_PATH/bin/targets/*/*
 
+        echo "KERNEL=$(grep '^kernel ' *.manifest | cut -d- -f2)" >> $GITHUB_ENV
+
+        rm -rf packages
+        rm -rf *.manifest
+        rm -rf *.buildinfo
+        rm -rf sha256sums
+        rm -rf profiles.json
+
+        rename 's/^/mini-/' *
+
+        echo "FIRMWARE_PATH=$PWD" >> $GITHUB_ENV
 
 
-        echo "固件信息"
-
-        cat config.buildinfo
-
-
-
-        echo \
-        "KERNEL=$(grep '^kernel' *.manifest | cut -d- -f2)" \
-        >> $GITHUB_ENV
-
-
-
-
-        rm -rf \
-        packages \
-        *.buildinfo \
-        *.manifest \
-        profiles.json \
-        sha256sums \
-        *kernel.bin \
-        *rootfs.img.gz
-
-
-
-        rename \
-        's/^/mini-/' \
-        *
-
-
-
-        echo \
-        "FIRMWARE_PATH=$PWD" \
-        >> $GITHUB_ENV
-
-
-
-
-
-
-    # ====================================================
-    # 上传 Artifact
-    # ====================================================
-
-
-    - name: 上传固件 Artifact
-
-
-      if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE != 'true'
-
-
-      uses: actions/upload-artifact@v4
-
-
-      with:
-
-
-        name:
-          OpenWrt-${{ env.DEVICE_TARGET }}-${{ env.FILE_DATE }}
-
-
-        path:
-          ${{ env.FIRMWARE_PATH }}
-
-
-
-
-
-
-
-    # ====================================================
-    # Release
-    # ====================================================
-
-
-    - name: 发布 Release
-
-
-      if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
-
-
+    - name: 发布Release
+      if: steps.compile.outputs.status == 'success'
       uses: ncipollo/release-action@v1
-
-
       with:
-
-
-        name:
-          R${{ env.DATE }} OpenWrt Mini X86_64
-
-
-
-        tag:
-          ${{ env.RELEASE_TAG }}
-
-
-
-        token:
-          ${{ secrets.GITHUB_TOKEN }}
-
-
-
-        allowUpdates:
-          false
-
-
-
-        artifacts:
-          ${{ env.FIRMWARE_PATH }}/*
-
-
+        name: OpenWrt Mini ${{ env.DATE }}
+        tag: ${{ env.RELEASE_TAG }}
+        artifacts: ${{ env.FIRMWARE_PATH }}/*
+        token: ${{ secrets.GITHUB_TOKEN }}
 
         body: |
+          ## OpenWrt x86_64 Mini
 
+          - 源码: ${{ env.REPO_URL }}
+          - 分支: ${{ env.REPO_BRANCH }}
+          - LuCI: openwrt-25.12
+          - Kernel: ${{ env.KERNEL }}
+          - IP: 10.0.0.1
+          - Rootfs: 2048MB
 
-          # OpenWrt x86_64 Mini AIO
-
-
-          ## 固件信息
-
-
-          - 平台:
-            ${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
-
-
-          - 源码:
-            ${{ env.REPO_URL }}
-
-
-          - 分支:
-            ${{ env.REPO_BRANCH }}
-
-
-          - LuCI:
-            openwrt-25.12
-
-
-          - Kernel:
-            ${{ env.KERNEL }}
-
-
-
-          - 默认地址:
-            10.0.0.1
-
-
-
-          - 默认Shell:
-            zsh
-
-
-
-          ## 内置插件
-
-
+          插件:
           - PassWall
-
-
-          - Docker
-
-
-          - Dockerman
-
-
+          - DockerMan
           - DiskMan
-
-
-          - Samba4
-
-
           - Lucky
-
-
           - PushBot
-
-
+          - Samba4
           - Argon
-
-
           - TTYD
 
 
-
-
-
-
-    # ====================================================
-    # 清理旧版本
-    # ====================================================
-
-
-    - name: 清理旧 Release
-
-
-      if: steps.compile.outputs.status == 'success' && env.FIRMWARE_RELEASE == 'true'
-
-
+    - name: 清理旧Release
+      if: steps.compile.outputs.status == 'success'
       env:
-
-
-        GH_TOKEN:
-          ${{ secrets.GITHUB_TOKEN }}
-
-
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       run: |
 
-
-        echo "清理旧版本"
-
-
-
         keep=5
 
-
-
-        releases=$(gh release list \
+        tags=$(gh release list \
         --limit 100 \
         --json tagName \
-        --jq '.[].tagName')
+        --jq '.[].tagName' | grep "^X86_64-" || true)
 
 
-
-        count=$(echo "$releases" | wc -l)
-
+        count=$(echo "$tags" | wc -l)
 
 
         if [ "$count" -gt "$keep" ]; then
 
-
-
-          delete=$((count-keep))
-
-
-
-          echo "$releases" \
-          | head -n "$delete" \
-          | while read tag
-
+          echo "$tags" | head -n $((count-keep)) | while read tag
 
           do
 
-
-              echo "删除:"
-              $tag
-
-
-
-              gh release delete \
-              "$tag" \
-              --cleanup-tag \
-              --yes
-
+            gh release delete "$tag" \
+            --yes \
+            --cleanup-tag
 
           done
-
 
         fi
