@@ -11,7 +11,8 @@ env:
   CONFIG_FILE: configs/x86_64-mini.config
   DIY_SCRIPT: diy-mini.sh
   CLASH_KERNEL: amd64
-  CACHE_TOOLCHAIN: true
+  # 首次编译关闭缓存，避免 ARM 与旧 x86 缓存冲突
+  CACHE_TOOLCHAIN: false
   UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
   FIRMWARE_TAG: X86_64
@@ -20,6 +21,7 @@ env:
 
 jobs:
   Build:
+    # 使用 ARM 4 核 runner（加速）
     runs-on: ubuntu-24.04-arm
 
     steps:
@@ -45,11 +47,8 @@ jobs:
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
-        # 先更新源，确保包列表可用
         sudo -E apt-get -y update
-        # 清理不需要的预装包（忽略错误）
         sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
-        # 安装 OpenWrt 编译所需的所有依赖（直接列出，不依赖外部脚本）
         sudo -E apt-get -y install build-essential clang flex bison g++ gawk \
         gettext git libssl-dev libncurses-dev libelf-dev zlib1g-dev \
         libudev-dev rsync subversion unzip uuid-dev xsltproc zip \
@@ -58,7 +57,6 @@ jobs:
         sudo -E apt-get -y autoremove --purge
         sudo -E apt-get -y clean
         sudo timedatectl set-timezone "$TZ"
-        # 清理无用文件夹（保留源目录）
         sudo rm -rf /usr/share/dotnet/
         sudo rm -rf /usr/local/graalvm/
         sudo rm -rf /usr/local/.ghcup/
@@ -95,7 +93,7 @@ jobs:
         DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}')
         echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
 
-    - name: 缓存工具链
+    - name: 缓存工具链（已禁用，避免 ARM 不兼容）
       if: env.CACHE_TOOLCHAIN == 'true'
       uses: HiGarfield/cachewrtbuild@main
       with:
