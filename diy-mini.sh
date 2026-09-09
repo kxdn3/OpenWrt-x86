@@ -92,9 +92,9 @@ git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall-package
 git clone --depth=1 https://github.com/Openwrt-Passwall/openwrt-passwall package/luci-app-passwall
 
 # ========== 主题 ==========
-git clone --depth=1 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
-git clone --depth=1 https://github.com/jerrykuku/luci-app-argon-config package/luci-app-argon-config
-sed -i 's/luci-theme-bootstrap/luci-theme-argon/g' ./feeds/luci/collections/luci/Makefile
+# 原 Argon 主题替换为 Fluent 主题
+git clone --depth=1 https://github.com/LazuliKao/luci-theme-fluent package/luci-theme-fluent
+sed -i 's/luci-theme-bootstrap/luci-theme-fluent/g' ./feeds/luci/collections/luci/Makefile
 
 # ========== 核心库与工具替换/升级 ==========
 merge_package master https://github.com/openwrt/packages feeds/packages/libs libs/nghttp3 libs/ngtcp2
@@ -158,8 +158,8 @@ REMOVE_PACKAGES=(
     "feeds/packages/net/mosdns"
     "feeds/packages/net/msd_lite"
     "feeds/packages/net/smartdns"
-    "feeds/luci/applications/luci-app-msd_lite"   # ✅ 修正路径
-    "feeds/luci/applications/luci-app-smartdns"   # ✅ 修正路径
+    "feeds/luci/applications/luci-app-msd_lite"
+    "feeds/luci/applications/luci-app-smartdns"
     "feeds/helloworld/luci-app-ssr-plus"
 )
 
@@ -353,5 +353,5 @@ echo "  diy-mini.sh 执行完成"
 echo "  LuCI 分支: openwrt-25.12"
 echo "  内核版本: 6.12"
 echo "  默认 IP: 10.0.0.1"
-echo "  默认主题: argon"
+echo "  默认主题: fluent"
 echo "=========================================="
