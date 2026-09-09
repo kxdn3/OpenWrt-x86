@@ -3,7 +3,7 @@
 # OpenWrt x86_64 Mini 自定义编译脚本
 # 源码基准: coolsnowwolf/lede (master)
 # LuCI 分支: coolsnowwolf/luci (openwrt-25.12)
-# 内核版本: 6.12 (lede master 默认)
+# 内核版本: 6.18 (lede master 默认)
 #
 set -e
 
