@@ -11,6 +11,7 @@ env:
   CONFIG_FILE: configs/x86_64-mini.config
   DIY_SCRIPT: diy-mini.sh
   CLASH_KERNEL: amd64
+  # ✅ 开启工具链缓存（不缓存 dl 和 ccache，仅缓存工具链源码/构建目录）
   CACHE_TOOLCHAIN: true
   UPLOAD_BIN_DIR: false
   FIRMWARE_RELEASE: true
@@ -20,7 +21,8 @@ env:
 
 jobs:
   Build:
-    runs-on: ubuntu-22.04
+    # ⚡ 使用 4 核 ARM64 runner（原为 ubuntu-22.04，提升一倍速度）
+    runs-on: ubuntu-24.04-arm
 
     steps:
     - name: 检出代码
@@ -89,11 +91,12 @@ jobs:
         DEVICE_SUBTARGET=$(cat .config | grep CONFIG_TARGET_SUBTARGET | awk -F '"' '{print $2}')
         echo "DEVICE_SUBTARGET=$DEVICE_SUBTARGET" >> $GITHUB_ENV
 
+    # ✅ 工具链缓存（仅缓存工具链构建产物，不涉及 dl 或 ccache）
     - name: 缓存工具链
       if: env.CACHE_TOOLCHAIN == 'true'
       uses: HiGarfield/cachewrtbuild@main
       with:
-        ccache: false
+        ccache: false                # 明确禁用 ccache
         mixkey: ${{ env.SOURCE_REPO }}-${{ env.REPO_BRANCH }}-${{ env.DEVICE_TARGET }}-${{ env.DEVICE_SUBTARGET }}
         prefix: ${{ env.OPENWRT_PATH }}
 
@@ -119,7 +122,8 @@ jobs:
       run: |
         cd $OPENWRT_PATH
         make defconfig
-        make download -j8
+        # ⚡ 并行下载（利用所有核心）
+        make download -j$(nproc)
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
 
