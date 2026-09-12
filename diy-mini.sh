@@ -78,7 +78,7 @@ rm -rf feeds/luci/applications/luci-app-diskman
 
 # ========== 添加第三方插件 ==========
 git clone --depth=1 https://github.com/gdy666/luci-app-lucky.git package/lucky
-git clone --depth=1 https://github.com/zzsj0928/luci-app-pushbot package/luci-app-pushbot
+git clone https://github.com/zzsj0928/luci-app-pushbot package/luci-app-pushbot
 
 git clone https://github.com/lisaac/luci-app-dockerman.git package/tmp-dockerman
 cp -r package/tmp-dockerman/applications/luci-app-dockerman package/
@@ -133,6 +133,9 @@ sed -i '/\/etc\/shadow/{/root/d;}' package/lean/default-settings/files/zzz-defau
 if [ -f "$GITHUB_WORKSPACE/scripts/011-fix-mbo-modules-build.patch" ]; then
     cp -f "$GITHUB_WORKSPACE/scripts/011-fix-mbo-modules-build.patch" package/network/services/hostapd/patches/011-fix-mbo-modules-build.patch
 fi
+
+# 确保系统里有 bash
+sed -i 's/# CONFIG_PACKAGE_bash is not set/CONFIG_PACKAGE_bash=y/' .config
 
 # ========== 修正第三方包 Makefile 路径问题 ==========
 find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's|../../luci.mk|$(TOPDIR)/feeds/luci/luci.mk|g' {} \;
