@@ -439,7 +439,7 @@ fi
 for file in package/lean/autocore/files/*/index.htm; do
     [ -f "$file" ] || continue
     sed -i \
-    's/os.date()/os.date("%Y-%m-%d %H:%M:%S") .. " " .. translate(os.date("%A"))/g' \
+    's|os\.date()|os.date("%Y-%m-%d %H:%M:%S") .. " " .. translate(os.date("%A"))|g' \
     "$file"
 done
 
@@ -454,19 +454,32 @@ VERSION_FILE="package/lean/default-settings/files/zzz-default-settings"
 
 if [ -f "$VERSION_FILE" ]; then
     DATE_VERSION=$(date +"%y.%m.%d")
-    OLD_VERSION=$(grep DISTRIB_REVISION "$VERSION_FILE" | awk -F "'" '{print $2}')
+
+    # 只取第一行匹配,避免多行;去掉可能的 CR
+    OLD_VERSION=$(grep -m1 DISTRIB_REVISION "$VERSION_FILE" \
+                  | awk -F "'" '{print $2}' \
+                  | head -n1 \
+                  | tr -d '\r')
 
     if [ -n "$OLD_VERSION" ]; then
+        echo "    旧版本: [$OLD_VERSION]"
+        echo "    新版本: [R${DATE_VERSION} by kxdn]"
+
         if command -v perl >/dev/null 2>&1; then
-            perl -i -pe \
-            "s/\Q${OLD_VERSION}\E/R${DATE_VERSION} by kxdn/g" \
-            "$VERSION_FILE"
+            # 关键:用 $ENV{} 把值传进去,不要让 shell 展开到 Perl 代码里
+            OLD_VERSION="$OLD_VERSION" \
+            NEW_VERSION="R${DATE_VERSION} by kxdn" \
+            perl -i -pe 's/\Q$ENV{OLD_VERSION}\E/$ENV{NEW_VERSION}/g' \
+                "$VERSION_FILE"
         else
-            OLD_VERSION_ESC=$(printf '%s' "$OLD_VERSION" | sed 's/[][\.*^$/]/\\&/g')
-            sed -i \
-            "s/${OLD_VERSION_ESC}/R${DATE_VERSION} by kxdn/g" \
-            "$VERSION_FILE"
+            # sed 兜底:先转义,且用 | 作分隔符
+            OLD_VERSION_ESC=$(printf '%s' "$OLD_VERSION" \
+                              | sed -e 's/[][\\.^$*\/]/\\&/g')
+            sed -i "s|${OLD_VERSION_ESC}|R${DATE_VERSION} by kxdn|g" \
+                "$VERSION_FILE"
         fi
+    else
+        echo "    未在 $VERSION_FILE 中找到 DISTRIB_REVISION,跳过"
     fi
 fi
 
