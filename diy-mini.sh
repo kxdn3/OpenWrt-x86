@@ -581,6 +581,10 @@ luci-lib-docker
 luci-app-diskman
 luci-app-lucky
 luci-app-pushbot
+iputils-arping
+curl
+wget-ssl
+jq
 ttyd
 zsh
 bash
@@ -647,7 +651,11 @@ make defconfig
 
 echo ">>> 校验关键包是否会被编入固件"
 
-for pkg in zsh bash luci-theme-fluent dockerd containerd docker; do
+for pkg in \
+    zsh bash luci-theme-fluent \
+    dockerd containerd docker \
+    luci-app-pushbot iputils-arping curl wget-ssl jq
+do
     if grep -q "CONFIG_PACKAGE_${pkg}=y" .config; then
         echo "    ✓ ${pkg} 已勾选"
     else
@@ -686,7 +694,7 @@ echo " PassWall"
 echo " DockerMan  (+ dockerd/containerd/docker)"
 echo " DiskMan"
 echo " Lucky"
-echo " PushBot"
+echo " PushBot    (+ arping/curl/wget-ssl/jq)"
 echo " Samba4"
 echo " Fluent Theme"
 echo " TTYD"
