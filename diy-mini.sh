@@ -12,10 +12,14 @@
 #   6.18
 #
 # Theme:
-#   luci-theme-fluent (forced)
+#   luci-theme-fluent (only, forced)
 #
 # Shell:
-#   bash + zsh
+#   default = zsh
+#   included = zsh + bash
+#
+# Docker:
+#   dockerd + containerd + docker + compose (explicit)
 #
 # Partition:
 #   GRUB boot      1024K (1MB)
@@ -34,9 +38,10 @@ CFG_FILE="package/base-files/files/bin/config_generate"
 echo "=========================================="
 echo " OpenWrt x86_64 Mini DIY"
 echo " LuCI: openwrt-25.12"
-echo " Kernel: 6.12"
-echo " Theme: fluent (forced)"
-echo " Shell: bash + zsh"
+echo " Kernel: 6.18"
+echo " Theme: fluent (only)"
+echo " Shell: default=zsh, include=zsh+bash"
+echo " Docker: engine + dockerman"
 echo "=========================================="
 
 
@@ -67,11 +72,11 @@ if [ -f "$CFG_FILE" ]; then
 fi
 
 
-# 默认 shell (bash)
-echo ">>> 设置默认Shell"
+# 默认 shell = zsh
+echo ">>> 设置默认Shell为 zsh"
 
 if [ -f package/base-files/files/etc/passwd ]; then
-    sed -i 's#/bin/ash#/usr/bin/bash#g' \
+    sed -i 's#/bin/ash#/usr/bin/zsh#g' \
     package/base-files/files/etc/passwd
 fi
 
@@ -97,9 +102,17 @@ sed -i \
 's/GRUB_EFI_BOOT_PARTSIZE:=256/GRUB_EFI_BOOT_PARTSIZE:=1024/g' \
 target/linux/x86/image/Makefile
 
+# Kernel 6.18
 sed -i \
-'s/KERNEL_PATCHVER:=.*/KERNEL_PATCHVER:=6.12/g' \
+'s/KERNEL_PATCHVER:=.*/KERNEL_PATCHVER:=6.18/g' \
 target/linux/x86/Makefile
+
+# 若上游将 6.18 归为 testing,则同时设置 testing 版本号
+if grep -q '^KERNEL_TESTING_PATCHVER' target/linux/x86/Makefile; then
+    sed -i \
+    's/KERNEL_TESTING_PATCHVER:=.*/KERNEL_TESTING_PATCHVER:=6.18/g' \
+    target/linux/x86/Makefile
+fi
 
 
 # ============================================================
@@ -135,11 +148,10 @@ remove_paths() {
     done
 }
 
-# 顺带删除 feeds 中可能存在的 argon / fluent 残留,避免与第三方包冲突
 remove_paths \
     feeds/luci/themes/luci-theme-argon \
-    feeds/luci/themes/luci-theme-fluent \
     feeds/luci/applications/luci-app-argon-config \
+    feeds/luci/themes/luci-theme-fluent \
     feeds/luci/applications/luci-app-mosdns \
     feeds/luci/applications/luci-app-netdata \
     feeds/luci/applications/luci-app-pushbot \
@@ -223,7 +235,7 @@ package/luci-app-passwall
 
 
 # ============================================================
-# ========== Fluent 主题(强制默认) ==========
+# ========== Fluent 主题(唯一主题) ==========
 # ============================================================
 
 echo ">>> 添加 Fluent 主题"
@@ -249,7 +261,7 @@ if [ -f "$DEFAULT_SETTINGS" ]; then
 fi
 
 
-# --- 3) 用 uci-defaults 强制设置 mediaurlbase ---
+# --- 3) 用 uci-defaults 强制设置 mediaurlbase 为 fluent ---
 FLUENT_UCI_DIR="package/lean/default-settings/files/etc/uci-defaults"
 mkdir -p "$FLUENT_UCI_DIR"
 
@@ -266,12 +278,12 @@ EOF
 chmod 0755 "$FLUENT_UCI_DIR/99-set-fluent-theme"
 
 
-# --- 4) 兜底:静态资源路径不一致时补软链 ---
+# --- 4) 兜底:静态资源目录名不一致时补软链 ---
 cat > "$FLUENT_UCI_DIR/98-fix-fluent-static" <<'EOF'
 #!/bin/sh
 FLUENT_DIR="/www/luci-static/fluent"
 if [ ! -d "$FLUENT_DIR" ]; then
-    for src in /www/luci-static/fluent* /www/luci-static/argon; do
+    for src in /www/luci-static/fluent*; do
         [ -d "$src" ] && [ "$src" != "$FLUENT_DIR" ] && \
             ln -sf "$src" "$FLUENT_DIR" && break
     done
@@ -282,7 +294,7 @@ EOF
 chmod 0755 "$FLUENT_UCI_DIR/98-fix-fluent-static"
 
 
-# --- 5) bash 软链(兼容硬编码 #!/bin/bash) ---
+# --- 5) bash 软链:保证 /bin/bash 存在 ---
 cat > "$FLUENT_UCI_DIR/97-bash-link" <<'EOF'
 #!/bin/sh
 [ -x /usr/bin/bash ] && [ ! -e /bin/bash ] && ln -sf /usr/bin/bash /bin/bash
@@ -565,12 +577,13 @@ luci-compat
 luci-lib-jsonc
 luci-app-passwall
 luci-app-dockerman
+luci-lib-docker
 luci-app-diskman
 luci-app-lucky
 luci-app-pushbot
 ttyd
-bash
 zsh
+bash
 "
 
 for pkg in $CORE_PACKAGES; do
@@ -584,7 +597,36 @@ for pkg in bash bash-full; do
     echo "CONFIG_PACKAGE_${pkg}=y" >> .config
 done
 
-# 显式排除 bootstrap / argon,防止 kconfig 自动勾回
+
+# ============================================================
+# ========== Docker 引擎(显式保险) ==========
+# ============================================================
+
+echo ">>> 显式勾选 Docker 引擎"
+
+for pkg in dockerd containerd docker docker-compose; do
+    grep -q "CONFIG_PACKAGE_${pkg}=y" .config || \
+    echo "CONFIG_PACKAGE_${pkg}=y" >> .config
+done
+
+# Docker 网络所需内核模块
+for pkg in \
+    kmod-br-netfilter \
+    kmod-veth \
+    kmod-ipt-nat \
+    kmod-nf-ipvs \
+    kmod-ipt-physdev \
+    kmod-nf-nathelper-extra
+do
+    grep -q "CONFIG_PACKAGE_${pkg}=y" .config || \
+    echo "CONFIG_PACKAGE_${pkg}=y" >> .config
+done
+
+
+# ============================================================
+# ========== 显式排除旧主题 ==========
+# ============================================================
+
 for pkg in luci-theme-bootstrap luci-theme-argon luci-app-argon-config; do
     sed -i "/CONFIG_PACKAGE_${pkg}=/d" .config
     echo "# CONFIG_PACKAGE_${pkg} is not set" >> .config
@@ -600,15 +642,23 @@ make defconfig
 
 
 # ============================================================
-# ========== bash 存在性检查 ==========
+# ========== 存在性校验 ==========
 # ============================================================
 
-echo ">>> 校验 bash 是否会被编入固件"
+echo ">>> 校验关键包是否会被编入固件"
 
-if grep -q "CONFIG_PACKAGE_bash=y" .config; then
-    echo "    ✓ bash 已勾选"
+for pkg in zsh bash luci-theme-fluent dockerd containerd docker; do
+    if grep -q "CONFIG_PACKAGE_${pkg}=y" .config; then
+        echo "    ✓ ${pkg} 已勾选"
+    else
+        echo "    ! 警告: ${pkg} 未勾选" >&2
+    fi
+done
+
+if grep -q "CONFIG_PACKAGE_luci-theme-argon=y" .config; then
+    echo "    ! 警告: argon 主题意外被勾选" >&2
 else
-    echo "    ! 警告: bash 未勾选,请检查 feeds/packages/utils/bash 是否存在" >&2
+    echo "    ✓ argon 主题已排除"
 fi
 
 
@@ -622,9 +672,10 @@ echo " diy-mini.sh 执行完成"
 echo
 echo " Platform : x86_64"
 echo " LuCI     : openwrt-25.12"
-echo " Kernel   : 6.12"
-echo " Theme    : fluent (forced)"
-echo " Shell    : bash + zsh"
+echo " Kernel   : 6.18"
+echo " Theme    : fluent (only)"
+echo " Shell    : zsh (default) + bash"
+echo " Docker   : engine + dockerman"
 echo " GRUB     : 1024K (1MB)"
 echo " Kernel P : 16MB"
 echo " Rootfs   : 2048MB"
@@ -632,13 +683,14 @@ echo " IP       : 10.0.0.1"
 echo
 echo " Plugins:"
 echo " PassWall"
-echo " DockerMan"
+echo " DockerMan  (+ dockerd/containerd/docker)"
 echo " DiskMan"
 echo " Lucky"
 echo " PushBot"
 echo " Samba4"
 echo " Fluent Theme"
 echo " TTYD"
-echo " Bash"
+echo " Zsh  (default login shell)"
+echo " Bash (installed, /bin/bash linked)"
 echo
 echo "=========================================="
