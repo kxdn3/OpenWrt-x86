@@ -9,7 +9,7 @@
 #   openwrt-25.12
 #
 # Kernel:
-#   6.12
+#   6.18
 #
 # Theme:
 #   luci-theme-fluent (forced)
