@@ -25,6 +25,7 @@ if [ -f "$CFG_FILE" ]; then
     sed -i "/timezone='CST-8'/a\\\t\t\set system.@system[-1].zonename='Asia/Shanghai'" "$CFG_FILE"
 fi
 
+# 注意：这里修改了默认 shell 为 zsh。如果后续 PushBot 依然报错，建议临时注释掉这行测试
 sed -i 's/\/bin\/ash/\/usr\/bin\/zsh/g' package/base-files/files/etc/passwd
 sed -i 's|/bin/login|/bin/login -f root|g' feeds/packages/utils/ttyd/files/ttyd.config
 
@@ -78,7 +79,16 @@ rm -rf feeds/luci/applications/luci-app-diskman
 
 # ========== 添加第三方插件 ==========
 git clone --depth=1 https://github.com/gdy666/luci-app-lucky.git package/lucky
-git clone https://github.com/zzsj0928/luci-app-pushbot package/luci-app-pushbot
+
+# PushBot 源码拉取及修复
+git clone --depth=1 https://github.com/zzsj0928/luci-app-pushbot package/luci-app-pushbot
+
+# --- 新增修复代码：强制修复换行符和权限，防止脚本损坏 ---
+echo ">>> 修复 PushBot 换行符和权限..."
+find package/luci-app-pushbot -type f -exec sed -i 's/\r$//' {} +
+chmod +x package/luci-app-pushbot/root/usr/bin/pushbot 2>/dev/null
+chmod +x package/luci-app-pushbot/root/etc/init.d/pushbot 2>/dev/null
+# ---------------------------------------------------------
 
 git clone https://github.com/lisaac/luci-app-dockerman.git package/tmp-dockerman
 cp -r package/tmp-dockerman/applications/luci-app-dockerman package/
@@ -133,9 +143,6 @@ sed -i '/\/etc\/shadow/{/root/d;}' package/lean/default-settings/files/zzz-defau
 if [ -f "$GITHUB_WORKSPACE/scripts/011-fix-mbo-modules-build.patch" ]; then
     cp -f "$GITHUB_WORKSPACE/scripts/011-fix-mbo-modules-build.patch" package/network/services/hostapd/patches/011-fix-mbo-modules-build.patch
 fi
-
-# 确保系统里有 bash
-sed -i 's/# CONFIG_PACKAGE_bash is not set/CONFIG_PACKAGE_bash=y/' .config
 
 # ========== 修正第三方包 Makefile 路径问题 ==========
 find package/*/ -maxdepth 2 -path "*/Makefile" -exec sed -i 's|../../luci.mk|$(TOPDIR)/feeds/luci/luci.mk|g' {} \;
@@ -201,6 +208,17 @@ sed -i '/CONFIG_PACKAGE_smartdns/d' .config 2>/dev/null
 # ========== 重新安装 feeds 并生成配置 ==========
 # ==========================================
 ./scripts/feeds install -a
+make defconfig
+
+# ==========================================
+# ========== 强制添加 Bash 环境（核心修复） ==========
+# ==========================================
+echo ">>> 强制集成 bash 及 zsh 环境..."
+sed -i 's/# CONFIG_PACKAGE_bash is not set/CONFIG_PACKAGE_bash=y/' .config
+grep -q "CONFIG_PACKAGE_bash=y" .config || echo "CONFIG_PACKAGE_bash=y" >> .config
+# 确保 zsh 也被集成（因为前面改了默认 shell 为 zsh）
+sed -i 's/# CONFIG_PACKAGE_zsh is not set/CONFIG_PACKAGE_zsh=y/' .config
+grep -q "CONFIG_PACKAGE_zsh=y" .config || echo "CONFIG_PACKAGE_zsh=y" >> .config
 make defconfig
 
 # 最终检查 .config 是否还有残留（仅输出，不修改）
