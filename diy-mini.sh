@@ -94,12 +94,9 @@ fi
 
 echo ">>> 设置x86分区"
 
-sed -i \
-'s/GRUB_BOOT_PARTSIZE:=256/GRUB_BOOT_PARTSIZE:=1024/g' \
-target/linux/x86/image/Makefile
-
-sed -i \
-'s/GRUB_EFI_BOOT_PARTSIZE:=256/GRUB_EFI_BOOT_PARTSIZE:=1024/g' \
+# BIOS Boot Partition: 256KB -> 1024KB (1MB)
+# 注意:控制它的是 Build/combined 段里硬编码的 256,不是 GRUB_BOOT_PARTSIZE。
+sed -i '/define Build\/combined/,/endef/s/^\s*256\s*$/ 1024/' \
 target/linux/x86/image/Makefile
 
 # Kernel 6.18
