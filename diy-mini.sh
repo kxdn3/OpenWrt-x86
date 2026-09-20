@@ -33,6 +33,7 @@ set -e
 
 OPENWRT_PATH="$PWD"
 CFG_FILE="package/base-files/files/bin/config_generate"
+DEFAULT_SETTINGS="package/lean/default-settings/files/zzz-default-settings"
 
 
 echo "=========================================="
@@ -242,63 +243,92 @@ https://github.com/LazuliKao/luci-theme-fluent \
 package/luci-theme-fluent
 
 
-# --- 1) 让 luci 元包选择 fluent 而非 bootstrap ---
-if [ -f feeds/luci/collections/luci/Makefile ]; then
-    sed -i \
-    's/luci-theme-bootstrap/luci-theme-fluent/g' \
-    feeds/luci/collections/luci/Makefile
-fi
+# ============================================================
+# ========== 主题强制:写到 base-files,避免被 feeds 覆盖 ==========
+# ============================================================
+#
+# 关键改动:
+#   1) 不再改 feeds/luci/collections/luci/Makefile(会被 feeds update 冲掉)
+#   2) 不再把 uci-defaults 写到 package/lean/default-settings(会被重装覆盖)
+#   3) 统一写到 package/base-files/files/etc/uci-defaults/
+#      因为 base-files 是最底层包,最后打包,不会被覆盖
+#
+echo ">>> 强制默认主题为 Fluent"
+
+BASE_UCI_DIR="package/base-files/files/etc/uci-defaults"
+mkdir -p "$BASE_UCI_DIR"
 
 
-# --- 2) 清理 zzz-default-settings 里可能存在的旧默认值 ---
-DEFAULT_SETTINGS="package/lean/default-settings/files/zzz-default-settings"
-
-if [ -f "$DEFAULT_SETTINGS" ]; then
-    sed -i '/luci\.main\.mediaurlbase/d' "$DEFAULT_SETTINGS"
-fi
-
-
-# --- 3) 用 uci-defaults 强制设置 mediaurlbase 为 fluent ---
-FLUENT_UCI_DIR="package/lean/default-settings/files/etc/uci-defaults"
-mkdir -p "$FLUENT_UCI_DIR"
-
-cat > "$FLUENT_UCI_DIR/99-set-fluent-theme" <<'EOF'
+# --- 1) 强制设置 mediaurlbase ---
+#     运行时探测 fluent 静态目录真实名字,避免写死导致 fallback
+cat > "$BASE_UCI_DIR/99-set-fluent-theme" <<'EOF'
 #!/bin/sh
+#
 # 强制将 LuCI 默认主题设为 Fluent
-uci -q batch <<-EOC
-    set luci.main.mediaurlbase='/luci-static/fluent'
-    commit luci
+# 注意:/luci-static/<name> 的 <name> 是主题包安装后的目录名,
+#      不同打包方式可能不同,这里运行时探测一次。
+#
+FLUENT_URL=""
+
+# 优先匹配 fluent 精确目录
+if [ -d /www/luci-static/fluent ]; then
+    FLUENT_URL="/luci-static/fluent"
+else
+    # 兜底:模糊匹配 fluent*
+    for d in /www/luci-static/fluent*; do
+        [ -d "$d" ] || continue
+        FLUENT_URL="/luci-static/$(basename "$d")"
+        break
+    done
+fi
+
+if [ -n "$FLUENT_URL" ]; then
+    uci -q batch <<-EOC
+        set luci.main.mediaurlbase='$FLUENT_URL'
+        commit luci
 EOC
+fi
+
 exit 0
 EOF
 
-chmod 0755 "$FLUENT_UCI_DIR/99-set-fluent-theme"
+chmod 0755 "$BASE_UCI_DIR/99-set-fluent-theme"
 
 
-# --- 4) 兜底:静态资源目录名不一致时补软链 ---
-cat > "$FLUENT_UCI_DIR/98-fix-fluent-static" <<'EOF'
+# --- 2) 兜底:静态资源目录名不一致时补软链 ---
+#     注意:只在 fluent* 存在但 fluent 不存在时才补
+cat > "$BASE_UCI_DIR/98-fix-fluent-static" <<'EOF'
 #!/bin/sh
 FLUENT_DIR="/www/luci-static/fluent"
+
 if [ ! -d "$FLUENT_DIR" ]; then
     for src in /www/luci-static/fluent*; do
         [ -d "$src" ] && [ "$src" != "$FLUENT_DIR" ] && \
-            ln -sf "$src" "$FLUENT_DIR" && break
+            ln -sf "$(basename "$src")" "$FLUENT_DIR" && break
     done
 fi
+
 exit 0
 EOF
 
-chmod 0755 "$FLUENT_UCI_DIR/98-fix-fluent-static"
+chmod 0755 "$BASE_UCI_DIR/98-fix-fluent-static"
 
 
-# --- 5) bash 软链:保证 /bin/bash 存在 ---
-cat > "$FLUENT_UCI_DIR/97-bash-link" <<'EOF'
+# --- 3) bash 软链:保证 /bin/bash 存在 ---
+cat > "$BASE_UCI_DIR/97-bash-link" <<'EOF'
 #!/bin/sh
 [ -x /usr/bin/bash ] && [ ! -e /bin/bash ] && ln -sf /usr/bin/bash /bin/bash
 exit 0
 EOF
 
-chmod 0755 "$FLUENT_UCI_DIR/97-bash-link"
+chmod 0755 "$BASE_UCI_DIR/97-bash-link"
+
+
+# --- 4) 清理 lean default-settings 里可能存在的旧 mediaurlbase ---
+#     放在这里,feeds install 之后还会再清一次(见脚本末尾)
+if [ -f "$DEFAULT_SETTINGS" ]; then
+    sed -i '/luci\.main\.mediaurlbase/d' "$DEFAULT_SETTINGS"
+fi
 
 
 # ============================================================
@@ -416,7 +446,17 @@ echo ">>> 更新Feeds"
 ./scripts/feeds update -a
 ./scripts/feeds install -a
 
-make defconfig
+
+# ============================================================
+# ========== feeds install 后再清一次 default-settings ==========
+# ============================================================
+# feeds install 可能把 lean 的 default-settings 重新铺开,
+# 里面如果带 mediaurlbase,会覆盖我们的 base-files uci-defaults。
+echo ">>> 二次清理 zzz-default-settings 里的 mediaurlbase"
+
+if [ -f "$DEFAULT_SETTINGS" ]; then
+    sed -i '/luci\.main\.mediaurlbase/d' "$DEFAULT_SETTINGS"
+fi
 
 
 # ============================================================
@@ -514,64 +554,29 @@ find package -maxdepth 3 -name Makefile \
 
 
 # ============================================================
-# ========== 驱动精简 ==========
+# ========== .config 强制主题(替代改 feeds 元包) ==========
 # ============================================================
+#
+# 说明:
+#   之前脚本改 feeds/luci/collections/luci/Makefile 是无效的,
+#   因为 feeds update -a 会重新拉取 luci 源覆盖掉修改。
+#   正确做法是在 .config 里显式选择 fluent,排除 bootstrap/argon。
+#
+echo ">>> 强制 .config 选择 fluent 主题"
 
-echo ">>> 清理无用驱动"
+# 先确保 .config 存在
+[ -f .config ] || cp .config.tmp .config 2>/dev/null || touch .config
 
-sed -i -E \
-'/^CONFIG_PACKAGE_kmod-(video|media|sound|i2c|gpio|spi|firewire|mmc|sdhci|drm-amdgpu|nouveau|mhi|qmi|usb-net-qmi|bluetooth|btusb|ath3k|bcmbt)/d' \
-.config
-
-REMOVE_DRIVERS="
-kmod-cfg80211
-kmod-mac80211
-wpad
-hostapd
-iw
-
-kmod-r816
-kmod-8139too
-kmod-8139cp
-kmod-r8125
-kmod-tg3
-kmod-bnx2
-kmod-sky2
-kmod-pcnet32
-kmod-via-rhine
-kmod-via-velocity
-kmod-forcedeth
-kmod-natsemi
-kmod-sis900
-
-bluez
-alsa-lib
-"
-
-for drv in $REMOVE_DRIVERS; do
-    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+# 排除旧主题
+for pkg in luci-theme-bootstrap luci-theme-argon luci-app-argon-config; do
+    sed -i "/CONFIG_PACKAGE_${pkg}=/d" .config
+    echo "# CONFIG_PACKAGE_${pkg} is not set" >> .config
 done
 
-
-# ============================================================
-# ========== 保留x86关键驱动 ==========
-# ============================================================
-
-echo ">>> 锁定关键驱动"
-
-KEEP_DRIVERS="
-kmod-igc
-kmod-e1000e
-kmod-ixgbe
-kmod-i40e
-kmod-ahci
-kmod-nvme
-kmod-virtio
-"
-
-for drv in $KEEP_DRIVERS; do
-    grep -q "CONFIG_PACKAGE_${drv}=y" .config || \
-    echo "CONFIG_PACKAGE_${drv}=y" >> .config
+# 强制 fluent
+for pkg in luci-theme-fluent; do
+    sed -i "/CONFIG_PACKAGE_${pkg}=/d" .config
+    echo "CONFIG_PACKAGE_${pkg}=y" >> .config
 done
 
 
@@ -638,12 +643,64 @@ done
 
 
 # ============================================================
-# ========== 显式排除旧主题 ==========
+# ========== 驱动精简 ==========
 # ============================================================
 
-for pkg in luci-theme-bootstrap luci-theme-argon luci-app-argon-config; do
-    sed -i "/CONFIG_PACKAGE_${pkg}=/d" .config
-    echo "# CONFIG_PACKAGE_${pkg} is not set" >> .config
+echo ">>> 清理无用驱动"
+
+sed -i -E \
+'/^CONFIG_PACKAGE_kmod-(video|media|sound|i2c|gpio|spi|firewire|mmc|sdhci|drm-amdgpu|nouveau|mhi|qmi|usb-net-qmi|bluetooth|btusb|ath3k|bcmbt)/d' \
+.config
+
+REMOVE_DRIVERS="
+kmod-cfg80211
+kmod-mac80211
+wpad
+hostapd
+iw
+
+kmod-r816
+kmod-8139too
+kmod-8139cp
+kmod-r8125
+kmod-tg3
+kmod-bnx2
+kmod-sky2
+kmod-pcnet32
+kmod-via-rhine
+kmod-via-velocity
+kmod-forcedeth
+kmod-natsemi
+kmod-sis900
+
+bluez
+alsa-lib
+"
+
+for drv in $REMOVE_DRIVERS; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+
+
+# ============================================================
+# ========== 保留x86关键驱动 ==========
+# ============================================================
+
+echo ">>> 锁定关键驱动"
+
+KEEP_DRIVERS="
+kmod-igc
+kmod-e1000e
+kmod-ixgbe
+kmod-i40e
+kmod-ahci
+kmod-nvme
+kmod-virtio
+"
+
+for drv in $KEEP_DRIVERS; do
+    grep -q "CONFIG_PACKAGE_${drv}=y" .config || \
+    echo "CONFIG_PACKAGE_${drv}=y" >> .config
 done
 
 
@@ -652,6 +709,24 @@ done
 # ============================================================
 
 echo ">>> 最终 defconfig 固化配置"
+make defconfig
+
+
+# ============================================================
+# ========== defconfig 后再次确认主题 ==========
+# ============================================================
+# make defconfig 可能因为依赖关系重新打开 bootstrap,
+# 这里再强制一次并再跑一次 defconfig 收敛。
+echo ">>> defconfig 后二次确认主题"
+
+for pkg in luci-theme-bootstrap luci-theme-argon luci-app-argon-config; do
+    sed -i "/CONFIG_PACKAGE_${pkg}=/d" .config
+    echo "# CONFIG_PACKAGE_${pkg} is not set" >> .config
+done
+
+grep -q "CONFIG_PACKAGE_luci-theme-fluent=y" .config || \
+    echo "CONFIG_PACKAGE_luci-theme-fluent=y" >> .config
+
 make defconfig
 
 
@@ -677,6 +752,12 @@ if grep -q "CONFIG_PACKAGE_luci-theme-argon=y" .config; then
     echo "    ! 警告: argon 主题意外被勾选" >&2
 else
     echo "    ✓ argon 主题已排除"
+fi
+
+if grep -q "CONFIG_PACKAGE_luci-theme-bootstrap=y" .config; then
+    echo "    ! 警告: bootstrap 主题意外被勾选" >&2
+else
+    echo "    ✓ bootstrap 主题已排除"
 fi
 
 
