@@ -189,9 +189,10 @@ clone_pkg()
 
 echo ">>> 添加第三方插件"
 
+# Lucky（sirpdboy 仓库）
 clone_pkg \
-https://github.com/gdy666/luci-app-lucky.git \
-package/lucky
+https://github.com/sirpdboy/luci-app-lucky.git \
+package/luci-app-lucky
 
 clone_pkg \
 https://github.com/zzsj0928/luci-app-pushbot \
