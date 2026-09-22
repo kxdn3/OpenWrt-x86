@@ -12,7 +12,8 @@
 #   6.18
 #
 # Theme:
-#   luci-theme-fluent (only, forced)
+#   luci-theme-fluent (default, 编译期写死)
+#   luci-theme-bootstrap (kept as fallback)
 #
 # Shell:
 #   default = zsh
@@ -40,7 +41,7 @@ echo "=========================================="
 echo " OpenWrt x86_64 Mini DIY"
 echo " LuCI: openwrt-25.12"
 echo " Kernel: 6.18"
-echo " Theme: fluent (only)"
+echo " Theme: fluent (default), bootstrap (fallback)"
 echo " Shell: default=zsh, include=zsh+bash"
 echo " Docker: engine + dockerman"
 echo "=========================================="
@@ -234,7 +235,7 @@ package/luci-app-passwall
 
 
 # ============================================================
-# ========== Fluent 主题(唯一主题) ==========
+# ========== Fluent 主题(默认主题) ==========
 # ============================================================
 
 echo ">>> 添加 Fluent 主题"
@@ -245,7 +246,62 @@ package/luci-theme-fluent
 
 
 # ============================================================
-# ========== 主题强制:写到 base-files,避免被 feeds 覆盖 ==========
+# ========== 编译期写死 luci 默认主题 ==========
+# ============================================================
+#
+# 说明:
+#   只靠 uci-defaults 不可靠,可能被 lean 的 zzz-default-settings 覆盖。
+#   最稳做法是在编译期直接写入 /etc/config/luci,
+#   这样固件刷完开机就是 fluent,不会变。
+#   bootstrap 源码保留,用户可在后台手动切回。
+#
+echo ">>> 编译期写死 luci 默认主题为 fluent"
+
+LUCI_CONFIG="package/base-files/files/etc/config/luci"
+
+mkdir -p "$(dirname "$LUCI_CONFIG")"
+
+cat > "$LUCI_CONFIG" <<'EOF'
+config core 'main'
+    option lang 'zh_cn'
+    option mediaurlbase '/luci-static/fluent'
+    option resourcebase '/luci-static/resources'
+
+config extern 'flash_keep'
+    option uci '/etc/config/'
+    option dropbear '/etc/dropbear/'
+    option openvpn '/etc/openvpn/'
+    option passwd '/etc/passwd'
+    option opkg '/etc/opkg.conf'
+    option firewall '/etc/firewall.user'
+    option uploads '/lib/uci/upload/'
+
+config internal 'languages'
+    option en 'English'
+    option zh_cn '简体中文'
+
+config internal 'sauth'
+    option sessionpath '/tmp/luci-sessions'
+    option sessiontime '3600'
+
+config internal 'ccache'
+    option enable '1'
+
+config internal 'apply'
+    option rollback '90'
+    option holdoff '4'
+    option timeout '5'
+    option display '1'
+
+config internal 'diag'
+    option dns 'openwrt.org'
+    option ping 'openwrt.org'
+    option route 'openwrt.org'
+EOF
+
+
+# ============================================================
+# ========== 主题强制:base-files uci-defaults 兜底 ==========
 # ============================================================
 #
 # 关键改动:
@@ -253,29 +309,28 @@ package/luci-theme-fluent
 #   2) 不再把 uci-defaults 写到 package/lean/default-settings(会被重装覆盖)
 #   3) 统一写到 package/base-files/files/etc/uci-defaults/
 #      因为 base-files 是最底层包,最后打包,不会被覆盖
+#   4) 文件名用 zzz- 前缀,保证排在 lean 的 zzz-default-settings 之后执行
 #
-echo ">>> 强制默认主题为 Fluent"
+# 注意:
+#   编译期已写死 /etc/config/luci,这里只是兜底,防止用户误改后无法恢复。
+#
+echo ">>> 兜底:确保默认主题为 Fluent"
 
 BASE_UCI_DIR="package/base-files/files/etc/uci-defaults"
 mkdir -p "$BASE_UCI_DIR"
 
 
-# --- 1) 强制设置 mediaurlbase ---
-#     运行时探测 fluent 静态目录真实名字,避免写死导致 fallback
-cat > "$BASE_UCI_DIR/99-set-fluent-theme" <<'EOF'
+# --- 1) 兜底设置 mediaurlbase ---
+cat > "$BASE_UCI_DIR/zzz-set-fluent-theme" <<'EOF'
 #!/bin/sh
 #
-# 强制将 LuCI 默认主题设为 Fluent
-# 注意:/luci-static/<name> 的 <name> 是主题包安装后的目录名,
-#      不同打包方式可能不同,这里运行时探测一次。
+# 兜底:如果 mediaurlbase 不是 fluent,强制改回
 #
 FLUENT_URL=""
 
-# 优先匹配 fluent 精确目录
 if [ -d /www/luci-static/fluent ]; then
     FLUENT_URL="/luci-static/fluent"
 else
-    # 兜底:模糊匹配 fluent*
     for d in /www/luci-static/fluent*; do
         [ -d "$d" ] || continue
         FLUENT_URL="/luci-static/$(basename "$d")"
@@ -284,21 +339,21 @@ else
 fi
 
 if [ -n "$FLUENT_URL" ]; then
-    uci -q batch <<-EOC
-        set luci.main.mediaurlbase='$FLUENT_URL'
-        commit luci
-EOC
+    CUR=$(uci -q get luci.main.mediaurlbase)
+    if [ "$CUR" != "$FLUENT_URL" ]; then
+        uci -q set luci.main.mediaurlbase="$FLUENT_URL"
+        uci -q commit luci
+    fi
 fi
 
 exit 0
 EOF
 
-chmod 0755 "$BASE_UCI_DIR/99-set-fluent-theme"
+chmod 0755 "$BASE_UCI_DIR/zzz-set-fluent-theme"
 
 
 # --- 2) 兜底:静态资源目录名不一致时补软链 ---
-#     注意:只在 fluent* 存在但 fluent 不存在时才补
-cat > "$BASE_UCI_DIR/98-fix-fluent-static" <<'EOF'
+cat > "$BASE_UCI_DIR/zzz-fix-fluent-static" <<'EOF'
 #!/bin/sh
 FLUENT_DIR="/www/luci-static/fluent"
 
@@ -312,24 +367,17 @@ fi
 exit 0
 EOF
 
-chmod 0755 "$BASE_UCI_DIR/98-fix-fluent-static"
+chmod 0755 "$BASE_UCI_DIR/zzz-fix-fluent-static"
 
 
 # --- 3) bash 软链:保证 /bin/bash 存在 ---
-cat > "$BASE_UCI_DIR/97-bash-link" <<'EOF'
+cat > "$BASE_UCI_DIR/zzz-bash-link" <<'EOF'
 #!/bin/sh
 [ -x /usr/bin/bash ] && [ ! -e /bin/bash ] && ln -sf /usr/bin/bash /bin/bash
 exit 0
 EOF
 
-chmod 0755 "$BASE_UCI_DIR/97-bash-link"
-
-
-# --- 4) 清理 lean default-settings 里可能存在的旧 mediaurlbase ---
-#     放在这里,feeds install 之后还会再清一次(见脚本末尾)
-if [ -f "$DEFAULT_SETTINGS" ]; then
-    sed -i '/luci\.main\.mediaurlbase/d' "$DEFAULT_SETTINGS"
-fi
+chmod 0755 "$BASE_UCI_DIR/zzz-bash-link"
 
 
 # ============================================================
@@ -493,7 +541,6 @@ VERSION_FILE="package/lean/default-settings/files/zzz-default-settings"
 if [ -f "$VERSION_FILE" ]; then
     DATE_VERSION=$(date +"%y.%m.%d")
 
-    # 只取第一行匹配,避免多行;去掉可能的 CR
     OLD_VERSION=$(grep -m1 DISTRIB_REVISION "$VERSION_FILE" \
                   | awk -F "'" '{print $2}' \
                   | head -n1 \
@@ -504,13 +551,11 @@ if [ -f "$VERSION_FILE" ]; then
         echo "    新版本: [R${DATE_VERSION} by kxdn]"
 
         if command -v perl >/dev/null 2>&1; then
-            # 关键:用 $ENV{} 把值传进去,不要让 shell 展开到 Perl 代码里
             OLD_VERSION="$OLD_VERSION" \
             NEW_VERSION="R${DATE_VERSION} by kxdn" \
             perl -i -pe 's/\Q$ENV{OLD_VERSION}\E/$ENV{NEW_VERSION}/g' \
                 "$VERSION_FILE"
         else
-            # sed 兜底:先转义,且用 | 作分隔符
             OLD_VERSION_ESC=$(printf '%s' "$OLD_VERSION" \
                               | sed -e 's/[][\\.^$*\/]/\\&/g')
             sed -i "s|${OLD_VERSION_ESC}|R${DATE_VERSION} by kxdn|g" \
@@ -519,23 +564,6 @@ if [ -f "$VERSION_FILE" ]; then
     else
         echo "    未在 $VERSION_FILE 中找到 DISTRIB_REVISION,跳过"
     fi
-fi
-
-
-# ============================================================
-# ========== hostapd修复 ==========
-# ============================================================
-
-echo ">>> 检查hostapd补丁"
-
-PATCH="${GITHUB_WORKSPACE:-$PWD}/scripts/011-fix-mbo-modules-build.patch"
-
-if [ -f "$PATCH" ]; then
-    mkdir -p package/network/services/hostapd/patches
-    cp "$PATCH" \
-    package/network/services/hostapd/patches/011-fix-mbo-modules-build.patch
-else
-    echo ">>> 补丁不存在,跳过: $PATCH"
 fi
 
 
@@ -555,30 +583,40 @@ find package -maxdepth 3 -name Makefile \
 
 
 # ============================================================
-# ========== .config 强制主题(替代改 feeds 元包) ==========
+# ========== .config 强制主题 ==========
 # ============================================================
 #
 # 说明:
-#   之前脚本改 feeds/luci/collections/luci/Makefile 是无效的,
-#   因为 feeds update -a 会重新拉取 luci 源覆盖掉修改。
-#   正确做法是在 .config 里显式选择 fluent,排除 bootstrap/argon。
+#   - 排除 argon
+#   - 选中 fluent
+#   - bootstrap 保留(作为 fallback,用户可手动切回)
 #
-echo ">>> 强制 .config 选择 fluent 主题"
+echo ">>> .config 选择 fluent 主题"
 
 # 先确保 .config 存在
 [ -f .config ] || cp .config.tmp .config 2>/dev/null || touch .config
 
-# 排除旧主题
-for pkg in luci-theme-bootstrap luci-theme-argon luci-app-argon-config; do
+# 排除 argon
+for pkg in luci-theme-argon luci-app-argon-config; do
     sed -i "/CONFIG_PACKAGE_${pkg}=/d" .config
     echo "# CONFIG_PACKAGE_${pkg} is not set" >> .config
 done
 
 # 强制 fluent
-for pkg in luci-theme-fluent; do
-    sed -i "/CONFIG_PACKAGE_${pkg}=/d" .config
-    echo "CONFIG_PACKAGE_${pkg}=y" >> .config
-done
+sed -i "/CONFIG_PACKAGE_luci-theme-fluent=/d" .config
+echo "CONFIG_PACKAGE_luci-theme-fluent=y" >> .config
+
+
+# ============================================================
+# ========== 清掉 default-settings 里的 mediaurlbase ==========
+# ============================================================
+# 关键:make defconfig 前再清一次,确保 lean 自带设置不会覆盖 fluent。
+#
+echo ">>> make defconfig 前最后一次清理 mediaurlbase"
+
+if [ -f "$DEFAULT_SETTINGS" ]; then
+    sed -i '/luci\.main\.mediaurlbase/d' "$DEFAULT_SETTINGS"
+fi
 
 
 # ============================================================
@@ -603,7 +641,6 @@ wget-ssl
 jq
 ttyd
 zsh
-bash
 "
 
 for pkg in $CORE_PACKAGES; do
@@ -611,11 +648,9 @@ for pkg in $CORE_PACKAGES; do
     echo "CONFIG_PACKAGE_${pkg}=y" >> .config
 done
 
-# bash 兼容不同 feeds 下的命名
-for pkg in bash bash-full; do
-    grep -q "CONFIG_PACKAGE_${pkg}=y" .config || \
-    echo "CONFIG_PACKAGE_${pkg}=y" >> .config
-done
+# bash
+grep -q "CONFIG_PACKAGE_bash=y" .config || \
+echo "CONFIG_PACKAGE_bash=y" >> .config
 
 
 # ============================================================
@@ -716,14 +751,15 @@ make defconfig
 # ============================================================
 # ========== defconfig 后再次确认主题 ==========
 # ============================================================
-# make defconfig 可能因为依赖关系重新打开 bootstrap,
-# 这里再强制一次并再跑一次 defconfig 收敛。
+# 只需确保 fluent 被选中,argon 被排除。
+# bootstrap 保留,允许用户手动切回。
 echo ">>> defconfig 后二次确认主题"
 
-for pkg in luci-theme-bootstrap luci-theme-argon luci-app-argon-config; do
-    sed -i "/CONFIG_PACKAGE_${pkg}=/d" .config
-    echo "# CONFIG_PACKAGE_${pkg} is not set" >> .config
-done
+sed -i "/CONFIG_PACKAGE_luci-theme-argon=/d" .config
+echo "# CONFIG_PACKAGE_luci-theme-argon is not set" >> .config
+
+sed -i "/CONFIG_PACKAGE_luci-app-argon-config=/d" .config
+echo "# CONFIG_PACKAGE_luci-app-argon-config is not set" >> .config
 
 grep -q "CONFIG_PACKAGE_luci-theme-fluent=y" .config || \
     echo "CONFIG_PACKAGE_luci-theme-fluent=y" >> .config
@@ -755,12 +791,6 @@ else
     echo "    ✓ argon 主题已排除"
 fi
 
-if grep -q "CONFIG_PACKAGE_luci-theme-bootstrap=y" .config; then
-    echo "    ! 警告: bootstrap 主题意外被勾选" >&2
-else
-    echo "    ✓ bootstrap 主题已排除"
-fi
-
 
 # ============================================================
 # ========== 最终检查 ==========
@@ -773,7 +803,8 @@ echo
 echo " Platform : x86_64"
 echo " LuCI     : openwrt-25.12"
 echo " Kernel   : 6.18"
-echo " Theme    : fluent (only)"
+echo " Theme    : fluent (default, 编译期写死)"
+echo "           bootstrap (fallback, 可手动切)"
 echo " Shell    : zsh (default) + bash"
 echo " Docker   : engine + dockerman"
 echo " GRUB     : 1024K (1MB)"
@@ -788,7 +819,7 @@ echo " DiskMan"
 echo " Lucky"
 echo " PushBot    (+ arping/curl/wget-ssl/jq)"
 echo " Samba4"
-echo " Fluent Theme"
+echo " Fluent Theme (default)"
 echo " TTYD"
 echo " Zsh  (default login shell)"
 echo " Bash (installed, /bin/bash linked)"
