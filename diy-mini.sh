@@ -148,8 +148,6 @@ remove_paths() {
 }
 
 remove_paths \
-    feeds/luci/themes/luci-theme-argon \
-    feeds/luci/applications/luci-app-argon-config \
     feeds/luci/themes/luci-theme-fluent \
     feeds/luci/applications/luci-app-mosdns \
     feeds/luci/applications/luci-app-netdata \
@@ -583,11 +581,10 @@ find package -maxdepth 3 -name Makefile \
 
 
 # ============================================================
-# ========== .config 强制主题 ==========
+# ========== .config 选择 fluent 主题 ==========
 # ============================================================
 #
 # 说明:
-#   - 排除 argon
 #   - 选中 fluent
 #   - bootstrap 保留(作为 fallback,用户可手动切回)
 #
@@ -596,13 +593,6 @@ echo ">>> .config 选择 fluent 主题"
 # 先确保 .config 存在
 [ -f .config ] || cp .config.tmp .config 2>/dev/null || touch .config
 
-# 排除 argon
-for pkg in luci-theme-argon luci-app-argon-config; do
-    sed -i "/CONFIG_PACKAGE_${pkg}=/d" .config
-    echo "# CONFIG_PACKAGE_${pkg} is not set" >> .config
-done
-
-# 强制 fluent
 sed -i "/CONFIG_PACKAGE_luci-theme-fluent=/d" .config
 echo "CONFIG_PACKAGE_luci-theme-fluent=y" >> .config
 
@@ -749,17 +739,10 @@ make defconfig
 
 
 # ============================================================
-# ========== defconfig 后再次确认主题 ==========
+# ========== defconfig 后确认 fluent ==========
 # ============================================================
-# 只需确保 fluent 被选中,argon 被排除。
-# bootstrap 保留,允许用户手动切回。
-echo ">>> defconfig 后二次确认主题"
 
-sed -i "/CONFIG_PACKAGE_luci-theme-argon=/d" .config
-echo "# CONFIG_PACKAGE_luci-theme-argon is not set" >> .config
-
-sed -i "/CONFIG_PACKAGE_luci-app-argon-config=/d" .config
-echo "# CONFIG_PACKAGE_luci-app-argon-config is not set" >> .config
+echo ">>> defconfig 后确认 fluent 主题"
 
 grep -q "CONFIG_PACKAGE_luci-theme-fluent=y" .config || \
     echo "CONFIG_PACKAGE_luci-theme-fluent=y" >> .config
@@ -784,12 +767,6 @@ do
         echo "    ! 警告: ${pkg} 未勾选" >&2
     fi
 done
-
-if grep -q "CONFIG_PACKAGE_luci-theme-argon=y" .config; then
-    echo "    ! 警告: argon 主题意外被勾选" >&2
-else
-    echo "    ✓ argon 主题已排除"
-fi
 
 
 # ============================================================
