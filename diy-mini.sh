@@ -188,6 +188,10 @@ clone_pkg()
 
 echo ">>> 添加第三方插件"
 
+# 先删掉 feeds 里自带的旧 lucky，避免和 sirpdboy 版本冲突
+remove_paths \
+    feeds/luci/applications/luci-app-lucky
+
 # Lucky（sirpdboy 仓库）
 clone_pkg \
 https://github.com/sirpdboy/luci-app-lucky.git \
@@ -504,6 +508,21 @@ echo ">>> 二次清理 zzz-default-settings 里的 mediaurlbase"
 if [ -f "$DEFAULT_SETTINGS" ]; then
     sed -i '/luci\.main\.mediaurlbase/d' "$DEFAULT_SETTINGS"
 fi
+
+
+# ============================================================
+# ========== 保险:彻底清理非 sirpdboy 的 lucky ==========
+# ============================================================
+# feeds install -a 之后可能又把旧 lucky 拉回来了,
+# 这里再扫一遍,确保只有 package/luci-app-lucky 一份。
+#
+echo ">>> 最终清理非 sirpdboy 的 lucky"
+
+find package/feeds feeds -maxdepth 4 -type d -name "luci-app-lucky" 2>/dev/null | \
+    grep -v "^package/luci-app-lucky$" | while read d; do
+    echo "    - removed $d"
+    rm -rf "$d"
+done
 
 
 # ============================================================
