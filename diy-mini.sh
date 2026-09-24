@@ -188,15 +188,35 @@ clone_pkg()
 
 echo ">>> 添加第三方插件"
 
-# 先删掉 feeds 里自带的旧 lucky，避免和 sirpdboy 版本冲突
+# 先删掉 feeds 里自带的旧 lucky（界面 + 核心）
 remove_paths \
-    feeds/luci/applications/luci-app-lucky
+    feeds/luci/applications/luci-app-lucky \
+    feeds/packages/net/lucky \
+    package/feeds/luci/luci-app-lucky \
+    package/feeds/packages/lucky
 
-# Lucky（sirpdboy 仓库）
+# sirpdboy 的 luci-app-lucky 仓库里同时含界面包和核心包：
+#   package/tmp-sirpdboy-lucky/         ← 界面包（PKG_VERSION 3.x）
+#   package/tmp-sirpdboy-lucky/lucky/   ← 核心包
+# 必须先把核心包移出来，再单独放到 package/lucky，
+# 否则 OpenWrt 扫描不到它，编译时会 fallback 到 feeds 里的旧核心 2.17.8。
+
 clone_pkg \
 https://github.com/sirpdboy/luci-app-lucky.git \
-package/luci-app-lucky
+package/tmp-sirpdboy-lucky
 
+# 1) 核心包：把 lucky/ 子目录单独移到 package/lucky
+if [ -d package/tmp-sirpdboy-lucky/lucky ]; then
+    mv package/tmp-sirpdboy-lucky/lucky package/lucky
+else
+    echo "    ! 警告: sirpdboy 仓库里没有 lucky/ 子目录" >&2
+fi
+
+# 2) 界面包：剩下的内容整体移到 package/luci-app-lucky
+mv package/tmp-sirpdboy-lucky package/luci-app-lucky
+
+
+# PushBot
 clone_pkg \
 https://github.com/zzsj0928/luci-app-pushbot \
 package/luci-app-pushbot
@@ -514,12 +534,13 @@ fi
 # ========== 保险:彻底清理非 sirpdboy 的 lucky ==========
 # ============================================================
 # feeds install -a 之后可能又把旧 lucky 拉回来了,
-# 这里再扫一遍,确保只有 package/luci-app-lucky 一份。
+# 这里再扫一遍,确保只有 package/luci-app-lucky 和 package/lucky 两份。
 #
 echo ">>> 最终清理非 sirpdboy 的 lucky"
 
-find package/feeds feeds -maxdepth 4 -type d -name "luci-app-lucky" 2>/dev/null | \
-    grep -v "^package/luci-app-lucky$" | while read d; do
+find package/feeds feeds -maxdepth 4 -type d -name "*lucky*" 2>/dev/null | \
+    grep -v "^package/luci-app-lucky$" | \
+    grep -v "^package/lucky$" | while read d; do
     echo "    - removed $d"
     rm -rf "$d"
 done
@@ -656,6 +677,10 @@ for pkg in $CORE_PACKAGES; do
     grep -q "CONFIG_PACKAGE_${pkg}=y" .config || \
     echo "CONFIG_PACKAGE_${pkg}=y" >> .config
 done
+
+# lucky 核心包（独立包名）
+grep -q "CONFIG_PACKAGE_lucky=y" .config || \
+echo "CONFIG_PACKAGE_lucky=y" >> .config
 
 # bash
 grep -q "CONFIG_PACKAGE_bash=y" .config || \
