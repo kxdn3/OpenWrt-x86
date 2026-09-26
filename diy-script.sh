@@ -171,7 +171,7 @@ clone https://github.com/lisaac/luci-app-diskman.git \
 clone https://github.com/zzsj0928/luci-app-pushbot.git \
     package/luci-app-pushbot
 
-# --- Lucky (sirpdboy)：自包含 clone，不依赖 clone() 函数 ---
+# --- Lucky (sirpdboy)：自包含 clone ---
 echo "  - Lucky (sirpdboy 版)"
 if [ ! -d package/lucky ]; then
     LUCKY_URL="https://github.com/sirpdboy/luci-app-lucky.git"
@@ -195,10 +195,10 @@ if [ ! -d package/lucky ]; then
         exit 1
     fi
 
-    if [ -f package/lucky/Makefile ]; then
-        echo "    ✓ package/lucky/Makefile (界面包)"
+    if [ -f package/lucky/luci-app-lucky/Makefile ]; then
+        echo "    ✓ package/lucky/luci-app-lucky/Makefile (界面包)"
     else
-        echo "!! package/lucky/Makefile 缺失" >&2
+        echo "!! package/lucky/luci-app-lucky/Makefile 缺失" >&2
         exit 1
     fi
 
