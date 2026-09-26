@@ -194,23 +194,22 @@ if [ ! -d package/lucky ]; then
         echo "!! Lucky clone 全部失败" >&2
         exit 1
     fi
-
-    if [ -f package/lucky/luci-app-lucky/Makefile ]; then
-        echo "    ✓ package/lucky/luci-app-lucky/Makefile (界面包)"
-    else
-        echo "!! package/lucky/luci-app-lucky/Makefile 缺失" >&2
-        exit 1
-    fi
-
-    if [ -f package/lucky/lucky/Makefile ]; then
-        echo "    ✓ package/lucky/lucky/Makefile (核心包)"
-    else
-        echo "!! package/lucky/lucky/Makefile 缺失" >&2
-        exit 1
-    fi
 else
     echo "  - package/lucky 已存在，跳过克隆"
 fi
+
+# 打印 Lucky 内部实际的 Makefile 位置，便于确认结构
+echo "  ---- package/lucky 下的 Makefile 位置 ----"
+find package/lucky -maxdepth 3 -name Makefile -not -path '*/.git/*' 2>/dev/null \
+    || echo "    (未找到 Makefile)"
+
+# 至少要有 2 个 Makefile（界面包 + 核心包）
+MK_COUNT=$(find package/lucky -maxdepth 3 -name Makefile -not -path '*/.git/*' 2>/dev/null | wc -l)
+if [ "$MK_COUNT" -lt 2 ]; then
+    echo "!! package/lucky 下 Makefile 数量不足（${MK_COUNT}），仓库结构可能已变化" >&2
+    exit 1
+fi
+echo "  ✓ 找到 ${MK_COUNT} 个 Makefile"
 
 # ============================================================
 # 6. 分区大小
@@ -222,39 +221,61 @@ echo "CONFIG_TARGET_KERNEL_PARTSIZE=16" >> .config
 echo "CONFIG_TARGET_ROOTFS_PARTSIZE=2048" >> .config
 
 # ============================================================
-# 7. 启用所需包
+# 7. 启用所需包（直接追加 .config，不依赖 scripts/config）
 # ============================================================
 echo "[7/9] 启用插件"
+
+# 需要启用的包列表
+PKGS="luci-base luci-compat luci-mod-admin-full \
+      luci-theme-fluent zsh kmod-igc \
+      luci-app-passwall luci-app-dockerman luci-app-diskman \
+      luci-app-lucky lucky luci-app-pushbot \
+      docker dockerd docker-compose"
+
+# --- 7.1 先跑一次 defconfig，把基础符号生成出来 ---
+echo "  → make defconfig（第一次，生成基础符号）"
 make defconfig > /dev/null 2>&1 || true
 
-for p in \
-    luci-theme-fluent \
-    zsh \
-    kmod-igc \
-    luci-app-passwall \
-    luci-app-dockerman \
-    luci-app-diskman \
-    luci-app-lucky \
-    lucky \
-    luci-app-pushbot \
-    docker \
-    dockerd \
-    docker-compose ; do
-    ./scripts/config --set y "CONFIG_PACKAGE_${p}" 2>/dev/null || \
-        echo "  !! 未找到配置项: CONFIG_PACKAGE_${p}"
+# --- 7.2 直接追加 CONFIG_PACKAGE_xxx=y ---
+echo "  → 追加包开关到 .config"
+for p in $PKGS ; do
+    sed -i "/^CONFIG_PACKAGE_${p}=/d" .config
+    sed -i "/^# CONFIG_PACKAGE_${p} is not set/d" .config
+    echo "CONFIG_PACKAGE_${p}=y" >> .config
 done
 
+# --- 7.3 再跑一次 defconfig，让构建系统解析依赖并收敛 ---
+echo "  → make defconfig（第二次，解析依赖）"
 make defconfig > /dev/null 2>&1 || true
 
+# --- 7.4 校验 ---
 echo "---- 关键包校验 ----"
-for p in luci-app-passwall luci-app-dockerman luci-app-lucky lucky \
-         zsh luci-theme-fluent ; do
+for p in $PKGS ; do
     if grep -q "^CONFIG_PACKAGE_${p}=y" .config; then
         echo "  ✓ ${p}"
     else
-        echo "  ✗ ${p} 未启用（可能依赖不满足）"
+        echo "  ✗ ${p}"
     fi
 done
+
+# --- 7.5 未启用包诊断 ---
+echo "---- 未启用包诊断 ----"
+DIAG=0
+for p in $PKGS ; do
+    grep -q "^CONFIG_PACKAGE_${p}=y" .config && continue
+    DIAG=$((DIAG+1))
+    echo "== ${p} =="
+    if [ -f tmp/.packageinfo ] && grep -q "^Package: ${p}$" tmp/.packageinfo 2>/dev/null; then
+        echo "  包已识别，依赖未满足："
+        grep -A8 "^Package: ${p}$" tmp/.packageinfo | grep -E "Depends:" | head -3
+    else
+        echo "  包未被构建系统识别"
+        echo "  相关 Makefile 位置："
+        find package -maxdepth 4 -name Makefile -path "*${p}*" -not -path '*/.git/*' 2>/dev/null \
+            || echo "    (无)"
+    fi
+done
+[ "$DIAG" = "0" ] && echo "  ✓ 全部包已启用"
 
 # ============================================================
 # 8. 内核配置同步
