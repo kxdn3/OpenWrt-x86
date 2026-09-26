@@ -144,6 +144,29 @@ exit 0
 UCI_EOF
 chmod +x files/etc/uci-defaults/97-set-shell
 
+# --- 去除 LuCI 主页本地时间的 GMT+8 显示 ---
+echo "[3.5/8] 修正本地时间显示（去除 GMT+8）"
+
+LUCI_STATUS_JS=$(find package/feeds/luci feeds/luci -name "10_system.js" \
+    -path "*luci-mod-status*" 2>/dev/null | head -1)
+
+if [ -n "$LUCI_STATUS_JS" ] && [ -f "$LUCI_STATUS_JS" ]; then
+    echo "  → 找到文件: $LUCI_STATUS_JS"
+
+    # 针对 date 命令输出格式，移除 " GMT+8" 或 " GMT-..." 等时区标识
+    # 例如将 "2026年9月27日 GMT+800:12:43" 中的 " GMT+8" 去掉
+    sed -i "s/ GMT+[0-9]//g" "$LUCI_STATUS_JS"
+    sed -i "s/ GMT-[0-9]//g" "$LUCI_STATUS_JS"
+
+    # 如果时间字符串是直接拼接的，尝试移除括号内的时区
+    sed -i "s/ (GMT+[0-9])//g" "$LUCI_STATUS_JS"
+    sed -i "s/ (GMT-[0-9])//g" "$LUCI_STATUS_JS"
+
+    echo "  ✓ 已完成修改"
+    grep -n "GMT" "$LUCI_STATUS_JS" | head -5
+else
+    echo "  !! 未找到 luci-mod-status 的 10_system.js，跳过"
+fi
 # ============================================================
 # 4. 清理 feeds 旧 lucky
 # ============================================================
