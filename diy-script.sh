@@ -60,7 +60,7 @@ remove_paths() {
 # ============================================================
 # 0. 注入最新 PassWall 源
 # ============================================================
-echo "[0/9] 注入最新 PassWall 源到 feeds.conf.default"
+echo "[0/8] 注入最新 PassWall 源到 feeds.conf.default"
 
 if grep -q "Openwrt-Passwall/openwrt-passwall" feeds.conf.default 2>/dev/null; then
     echo "  → 已存在 PassWall 源，跳过"
@@ -87,7 +87,7 @@ echo "  → 安装 passwall 包"
 # ============================================================
 # 1. BIOS Boot Partition 256 -> 1024
 # ============================================================
-echo "[1/9] 调整 BIOS Boot Partition 大小"
+echo "[1/8] 调整 BIOS Boot Partition 大小"
 echo "  原始 Build/combined 段内含 256 的行："
 sed -n '/define Build\/combined/,/endef/p' target/linux/x86/image/Makefile \
     | grep -n 256 || echo "    (未找到)"
@@ -108,7 +108,7 @@ fi
 # ============================================================
 # 2. LAN IP 10.0.0.1
 # ============================================================
-echo "[2/9] 修改默认 LAN IP 为 10.0.0.1"
+echo "[2/8] 修改默认 LAN IP 为 10.0.0.1"
 mkdir -p files/etc/uci-defaults
 cat > files/etc/uci-defaults/98-set-lan-ip <<'UCI_EOF'
 #!/bin/sh
@@ -121,7 +121,7 @@ chmod +x files/etc/uci-defaults/98-set-lan-ip
 # ============================================================
 # 3. root 空密码 / 主题 / zsh
 # ============================================================
-echo "[3/9] 设置密码、主题和 Shell"
+echo "[3/8] 设置密码、主题和 Shell"
 if [ -f package/base-files/files/etc/shadow ]; then
     sed -i 's/^root:[^:]*:/root::/' package/base-files/files/etc/shadow
 fi
@@ -147,7 +147,7 @@ chmod +x files/etc/uci-defaults/97-set-shell
 # ============================================================
 # 4. 清理 feeds 旧 lucky
 # ============================================================
-echo "[4/9] 清理 feeds 旧 lucky"
+echo "[4/8] 清理 feeds 旧 lucky"
 remove_paths \
     feeds/luci/applications/luci-app-lucky \
     feeds/packages/net/lucky \
@@ -157,7 +157,7 @@ remove_paths \
 # ============================================================
 # 5. 克隆插件源码
 # ============================================================
-echo "[5/9] 克隆插件源码"
+echo "[5/8] 克隆插件源码"
 
 # --- Fluent 主题 ---
 clone https://github.com/LazuliKao/luci-theme-fluent.git \
@@ -198,12 +198,11 @@ else
     echo "  - package/lucky 已存在，跳过克隆"
 fi
 
-# 打印 Lucky 内部实际的 Makefile 位置，便于确认结构
+# 打印 Lucky 内部实际的 Makefile 位置
 echo "  ---- package/lucky 下的 Makefile 位置 ----"
 find package/lucky -maxdepth 3 -name Makefile -not -path '*/.git/*' 2>/dev/null \
     || echo "    (未找到 Makefile)"
 
-# 至少要有 2 个 Makefile（界面包 + 核心包）
 MK_COUNT=$(find package/lucky -maxdepth 3 -name Makefile -not -path '*/.git/*' 2>/dev/null | wc -l)
 if [ "$MK_COUNT" -lt 2 ]; then
     echo "!! package/lucky 下 Makefile 数量不足（${MK_COUNT}），仓库结构可能已变化" >&2
@@ -214,7 +213,7 @@ echo "  ✓ 找到 ${MK_COUNT} 个 Makefile"
 # ============================================================
 # 6. 分区大小
 # ============================================================
-echo "[6/9] 配置分区大小"
+echo "[6/8] 配置分区大小"
 sed -i '/CONFIG_TARGET_KERNEL_PARTSIZE/d' .config
 sed -i '/CONFIG_TARGET_ROOTFS_PARTSIZE/d' .config
 echo "CONFIG_TARGET_KERNEL_PARTSIZE=16" >> .config
@@ -223,20 +222,17 @@ echo "CONFIG_TARGET_ROOTFS_PARTSIZE=2048" >> .config
 # ============================================================
 # 7. 启用所需包（直接追加 .config，不依赖 scripts/config）
 # ============================================================
-echo "[7/9] 启用插件"
+echo "[7/8] 启用插件"
 
-# 需要启用的包列表
 PKGS="luci-base luci-compat luci-mod-admin-full \
       luci-theme-fluent zsh kmod-igc \
       luci-app-passwall luci-app-dockerman luci-app-diskman \
       luci-app-lucky lucky luci-app-pushbot \
       docker dockerd docker-compose"
 
-# --- 7.1 先跑一次 defconfig，把基础符号生成出来 ---
 echo "  → make defconfig（第一次，生成基础符号）"
 make defconfig > /dev/null 2>&1 || true
 
-# --- 7.2 直接追加 CONFIG_PACKAGE_xxx=y ---
 echo "  → 追加包开关到 .config"
 for p in $PKGS ; do
     sed -i "/^CONFIG_PACKAGE_${p}=/d" .config
@@ -244,11 +240,9 @@ for p in $PKGS ; do
     echo "CONFIG_PACKAGE_${p}=y" >> .config
 done
 
-# --- 7.3 再跑一次 defconfig，让构建系统解析依赖并收敛 ---
 echo "  → make defconfig（第二次，解析依赖）"
 make defconfig > /dev/null 2>&1 || true
 
-# --- 7.4 校验 ---
 echo "---- 关键包校验 ----"
 for p in $PKGS ; do
     if grep -q "^CONFIG_PACKAGE_${p}=y" .config; then
@@ -258,7 +252,6 @@ for p in $PKGS ; do
     fi
 done
 
-# --- 7.5 未启用包诊断 ---
 echo "---- 未启用包诊断 ----"
 DIAG=0
 for p in $PKGS ; do
@@ -278,16 +271,9 @@ done
 [ "$DIAG" = "0" ] && echo "  ✓ 全部包已启用"
 
 # ============================================================
-# 8. 内核配置同步
+# 8. 完成
 # ============================================================
-echo "[8/9] 同步内核配置"
-make kernel_oldconfig CONFIG_TARGET=subtarget > /dev/null 2>&1 || \
-    echo "  !! kernel_oldconfig 有未决项，请手动 make kernel_menuconfig 检查"
-
-# ============================================================
-# 9. 完成
-# ============================================================
-echo "[9/9] 校验 BIOS Boot Partition"
+echo "[8/8] 校验 BIOS Boot Partition"
 sed -n '/define Build\/combined/,/endef/p' target/linux/x86/image/Makefile \
     | grep -n "1024" || echo "  (未匹配到 1024，请手动确认)"
 
