@@ -3,12 +3,11 @@
 # diy-script.sh - ImmortalWrt 25.12 (apk) 自定义脚本
 # x86 物理机专用版
 # 功能：
-#   1. 内核切换到 6.18（含 RTC CMOS 补丁）
-#   2. BIOS Boot Partition 256 -> 1024
-#   3. LAN IP 10.0.0.1 / 主题 / root 空密码 / zsh
-#   4. Lucky（sirpdboy 版，拆分界面包 + 核心包）
-#   5. PassWall / Diskman / PushBot / Fluent
-#   6. 分区大小 + 包启用 + 内核配置同步
+#   1. BIOS Boot Partition 256 -> 1024
+#   2. LAN IP 10.0.0.1 / 主题 / root 空密码 / zsh
+#   3. Lucky（sirpdboy 版，拆分界面包 + 核心包）
+#   4. PassWall / Diskman / PushBot / Fluent
+#   5. 分区大小 + 包启用 + 内核配置同步
 # ============================================================
 
 set -e
@@ -17,8 +16,6 @@ echo "开始执行 DIY 脚本 (ImmortalWrt 25.12 / x86 物理机)"
 echo "========================================"
 
 TARGET_PLATFORM="x86"
-OLD_KVER="6.12"
-NEW_KVER="6.18"
 
 # ---------- 通用函数 ----------
 clone() {
@@ -35,93 +32,9 @@ remove_paths() {
 }
 
 # ============================================================
-# 0. 内核切换至 6.18（含补丁目录迁移）
+# 1. BIOS Boot Partition 256 -> 1024 (1MB)
 # ============================================================
-echo "[0/8] 内核版本检查与切换"
-
-CURRENT_KVER=$(grep -oP 'KERNEL_PATCHVER:=\K[0-9.]+' \
-    "target/linux/${TARGET_PLATFORM}/Makefile" 2>/dev/null || echo "unknown")
-echo "  当前 KERNEL_PATCHVER: ${CURRENT_KVER}"
-
-if [ "${CURRENT_KVER}" = "${NEW_KVER}" ]; then
-    echo "  → 已是 ${NEW_KVER}，跳过迁移"
-elif [ "${CURRENT_KVER}" = "${OLD_KVER}" ]; then
-    echo "  → 执行 ${OLD_KVER} → ${NEW_KVER} 迁移"
-    chmod +x scripts/kernel_bump.sh
-    ./scripts/kernel_bump.sh -p "${TARGET_PLATFORM}" \
-        -s "v${OLD_KVER}" -t "v${NEW_KVER}"
-    sed -i "s/^KERNEL_PATCHVER:=.*/KERNEL_PATCHVER:=${NEW_KVER}/" \
-        "target/linux/${TARGET_PLATFORM}/Makefile"
-    echo "  ✓ KERNEL_PATCHVER 已改为 ${NEW_KVER}"
-else
-    echo "  !! 未知内核版本 ${CURRENT_KVER}，请手动确认" >&2
-    exit 1
-fi
-
-# 校验补丁目录存在
-if [ ! -d "target/linux/${TARGET_PLATFORM}/patches-${NEW_KVER}" ]; then
-    echo "!! patches-${NEW_KVER} 不存在，内核迁移失败" >&2
-    exit 1
-fi
-echo "  ✓ patches-${NEW_KVER} 已就绪"
-
-# ============================================================
-# 0.5 RTC CMOS 补丁（6.18 物理机专属，修复 IRQ 报错）
-# ============================================================
-echo "[0.5/8] 检查 RTC CMOS 补丁"
-
-RTC_PATCH_DIR="target/linux/${TARGET_PLATFORM}/patches-${NEW_KVER}"
-RTC_PATCH_NAME="831-rtc-cmos-use-platform_get_irq_optional-in-probe.patch"
-
-if ls "${RTC_PATCH_DIR}" 2>/dev/null | grep -q "831-rtc-cmos-use-platform_get_irq_optional"; then
-    echo "  → RTC 补丁已存在，跳过"
-else
-    echo "  → 创建 RTC CMOS 补丁"
-    cat > "${RTC_PATCH_DIR}/${RTC_PATCH_NAME}" <<'PATCH_EOF'
-From: Rafael J. Wysocki <rafael.j.wysocki@intel.com>
-Subject: [PATCH] rtc: cmos: Use platform_get_irq_optional() in
- cmos_platform_probe()
-
-The rtc-cmos driver can live without an IRQ and returning an error code
-from platform_get_irq() is not a problem for it in general, so make it
-call platform_get_irq_optional() in cmos_platform_probe() instead of
-platform_get_irq() to avoid a confusing error message printed by the
-latter if an IRQ cannot be found for index 0, which is possible on x86
-platforms.
-
---- a/drivers/rtc/rtc-cmos.c
-+++ b/drivers/rtc/rtc-cmos.c
-@@ -1423,9 +1423,18 @@ static int __init cmos_platform_probe(struct platform_device *pdev)
- 	resource = platform_get_resource(pdev, IORESOURCE_IO, 0);
- 	else
- 		resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
--	irq = platform_get_irq(pdev, 0);
--	if (irq < 0)
-+	irq = platform_get_irq_optional(pdev, 0);
-+	if (irq < 0) {
- 		irq = -1;
-+#ifdef CONFIG_X86
-+		/*
-+		 * On some x86 systems, the IRQ is not
-+		 * defined, but it should always be safe
-+		 * to hardcode it on systems with a
-+		 * legacy PIC.
-+		 */
-+		if (nr_legacy_irqs())
-+			irq = RTC_IRQ;
-+#endif
-+	}
- 
- 	if (resource == NULL) {
- 		dev_err(&pdev->dev, "no I/O or memory resource\n");
-PATCH_EOF
-    echo "  ✓ RTC 补丁已创建"
-fi
-
-# ============================================================
-# 0.7 BIOS Boot Partition 256 -> 1024 (1MB)
-# ============================================================
-echo "[0.7/8] 调整 BIOS Boot Partition 大小"
+echo "[1/9] 调整 BIOS Boot Partition 大小"
 
 echo "  原始 Build/combined 段内含 256 的行："
 sed -n '/define Build\/combined/,/endef/p' target/linux/x86/image/Makefile \
@@ -143,9 +56,9 @@ else
 fi
 
 # ============================================================
-# 1. LAN IP 10.0.0.1（uci-defaults 方式）
+# 2. LAN IP 10.0.0.1（uci-defaults 方式）
 # ============================================================
-echo "[1/8] 修改默认 LAN IP 为 10.0.0.1"
+echo "[2/9] 修改默认 LAN IP 为 10.0.0.1"
 mkdir -p files/etc/uci-defaults
 cat > files/etc/uci-defaults/98-set-lan-ip <<'EOF'
 #!/bin/sh
@@ -156,9 +69,9 @@ EOF
 chmod +x files/etc/uci-defaults/98-set-lan-ip
 
 # ============================================================
-# 2. root 空密码 / 主题 / zsh
+# 3. root 空密码 / 主题 / zsh
 # ============================================================
-echo "[2/8] 设置密码、主题和 Shell"
+echo "[3/9] 设置密码、主题和 Shell"
 
 if [ -f package/base-files/files/etc/shadow ]; then
     sed -i 's/^root:[^:]*:/root::/' package/base-files/files/etc/shadow
@@ -184,9 +97,9 @@ EOF
 chmod +x files/etc/uci-defaults/97-set-shell
 
 # ============================================================
-# 3. 清理 feeds 里自带的旧 lucky，避免包名冲突
+# 4. 清理 feeds 里自带的旧 lucky，避免包名冲突
 # ============================================================
-echo "[3/8] 清理 feeds 旧 lucky"
+echo "[4/9] 清理 feeds 旧 lucky"
 
 remove_paths \
     feeds/luci/applications/luci-app-lucky \
@@ -195,9 +108,9 @@ remove_paths \
     package/feeds/packages/lucky
 
 # ============================================================
-# 4. 克隆插件源码（含 sirpdboy Lucky 拆分）
+# 5. 克隆插件源码（含 sirpdboy Lucky 拆分）
 # ============================================================
-echo "[4/8] 克隆插件源码"
+echo "[5/9] 克隆插件源码"
 
 # --- Fluent 主题 ---
 clone https://github.com/LazuliKao/luci-theme-fluent.git \
@@ -244,18 +157,18 @@ else
 fi
 
 # ============================================================
-# 5. 分区大小
+# 6. 分区大小
 # ============================================================
-echo "[5/8] 配置分区大小"
+echo "[6/9] 配置分区大小"
 sed -i '/CONFIG_TARGET_KERNEL_PARTSIZE/d' .config
 sed -i '/CONFIG_TARGET_ROOTFS_PARTSIZE/d' .config
 echo "CONFIG_TARGET_KERNEL_PARTSIZE=16" >> .config
 echo "CONFIG_TARGET_ROOTFS_PARTSIZE=2048" >> .config
 
 # ============================================================
-# 6. 启用所需包
+# 7. 启用所需包
 # ============================================================
-echo "[6/8] 启用插件"
+echo "[7/9] 启用插件"
 make defconfig > /dev/null 2>&1
 
 for p in \
@@ -288,16 +201,16 @@ for p in luci-app-passwall luci-app-dockerman luci-app-lucky lucky \
 done
 
 # ============================================================
-# 7. 内核配置同步
+# 8. 内核配置同步（保持当前 KERNEL_PATCHVER 不变）
 # ============================================================
-echo "[7/8] 同步内核配置到 ${NEW_KVER}"
+echo "[8/9] 同步内核配置"
 make kernel_oldconfig CONFIG_TARGET=subtarget > /dev/null 2>&1 || \
     echo "  !! kernel_oldconfig 有未决项，请手动 make kernel_menuconfig 检查"
 
 # ============================================================
-# 8. 完成
+# 9. 完成
 # ============================================================
-echo "[8/8] 校验 BIOS Boot Partition"
+echo "[9/9] 校验 BIOS Boot Partition"
 sed -n '/define Build\/combined/,/endef/p' target/linux/x86/image/Makefile \
     | grep -n "1024" || echo "  (未匹配到 1024，请手动确认)"
 
