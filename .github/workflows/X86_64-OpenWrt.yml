@@ -38,6 +38,11 @@ jobs:
         docker rmi $(docker images -q) 2>/dev/null || true
         sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d /usr/local/lib/android $AGENT_TOOLSDIRECTORY
         sudo -E apt-get -y purge azure-cli ghc* zulu* llvm* firefox google* dotnet* powershell openjdk* mongodb* moby* || true
+
+        # 启用 universe 和 multiverse 源
+        sudo add-apt-repository --yes --no-update universe
+        sudo add-apt-repository --yes --no-update multiverse
+
         sudo -E apt-get -y update
         sudo -E apt-get -y install build-essential clang flex bison g++ gawk \
           gcc-multilib g++-multilib gettext git libncurses-dev libssl-dev \
