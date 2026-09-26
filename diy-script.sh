@@ -90,14 +90,5 @@ CONFIG_PACKAGE_docker-compose=y
 EOF
 
 make defconfig > /dev/null 2>&1
-echo "========================================"
-echo "Docker 配置诊断"
-echo "========================================"
-echo "--- .config 中的 Docker 项 ---"
-grep -i docker .config || echo "  (无)"
-echo "--- feeds 中的 Docker 包 ---"
-find feeds -maxdepth 3 -type d -iname "*docker*" 2>/dev/null || echo "  (无)"
-echo "--- 已安装的 Docker 包 ---"
-find package -maxdepth 3 -type d -iname "*docker*" 2>/dev/null || echo "  (无)"
-echo "========================================"
+
 echo "DIY 脚本执行完毕"
