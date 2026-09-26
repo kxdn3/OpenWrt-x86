@@ -2,13 +2,6 @@
 # ============================================================
 # diy-script.sh - ImmortalWrt 25.12 (apk) 自定义脚本
 # x86 物理机专用版
-# 功能：
-#   1. BIOS Boot Partition 256 -> 1024
-#   2. LAN IP 10.0.0.1 / 主题 / root 空密码 / zsh
-#   3. PassWall 最新源（方法1：feeds.conf.default 顶部插入）
-#   4. Lucky（sirpdboy 版，保留原始层级结构）
-#   5. Diskman / PushBot / Fluent
-#   6. 分区大小 + 包启用 + 内核配置同步
 # ============================================================
 
 set -e
@@ -18,7 +11,6 @@ echo "========================================"
 
 TARGET_PLATFORM="x86"
 
-# 让 git 遇到错误立即失败，不要尝试交互式索要用户名/密码
 export GIT_TERMINAL_PROMPT=0
 export GIT_HTTP_LOW_SPEED_LIMIT=1000
 export GIT_HTTP_LOW_SPEED_TIME=30
@@ -26,19 +18,16 @@ export GIT_HTTP_LOW_SPEED_TIME=30
 # ---------- 通用函数 ----------
 clone() {
     local url="$1" dir="$2"
-
     if [ -d "$dir" ]; then
         echo "  - 已存在，跳过: $dir"
         return 0
     fi
     echo "  - clone: $dir"
-
     local candidates=(
         "$url"
         "https://ghfast.top/${url}"
         "https://gh-proxy.com/${url}"
     )
-
     local m attempt
     for m in "${candidates[@]}"; do
         for attempt in 1 2 3; do
@@ -51,7 +40,6 @@ clone() {
             sleep 3
         done
     done
-
     echo "!! clone 失败: $url" >&2
     exit 1
 }
@@ -70,7 +58,7 @@ remove_paths() {
 }
 
 # ============================================================
-# 0. 注入最新 PassWall 源到 feeds.conf.default 顶部（方法1）
+# 0. 注入最新 PassWall 源
 # ============================================================
 echo "[0/9] 注入最新 PassWall 源到 feeds.conf.default"
 
@@ -92,16 +80,14 @@ head -n 5 feeds.conf.default
 
 echo "  → 更新 passwall_packages / passwall_luci"
 ./scripts/feeds update passwall_packages passwall_luci
-
 echo "  → 安装 passwall 包"
 ./scripts/feeds install -a -p passwall_packages
 ./scripts/feeds install -a -p passwall_luci
 
 # ============================================================
-# 1. BIOS Boot Partition 256 -> 1024 (1MB)
+# 1. BIOS Boot Partition 256 -> 1024
 # ============================================================
 echo "[1/9] 调整 BIOS Boot Partition 大小"
-
 echo "  原始 Build/combined 段内含 256 的行："
 sed -n '/define Build\/combined/,/endef/p' target/linux/x86/image/Makefile \
     | grep -n 256 || echo "    (未找到)"
@@ -114,56 +100,54 @@ if sed -n '/define Build\/combined/,/endef/p' target/linux/x86/image/Makefile \
         | grep -qE '^[[:space:]]*1024[[:space:]]*$'; then
     echo "  ✓ BIOS Boot Partition 已改为 1024"
 else
-    echo "  !! 替换失败，请检查原始行格式" >&2
+    echo "  !! 替换失败" >&2
     sed -n '/define Build\/combined/,/endef/p' target/linux/x86/image/Makefile
     exit 1
 fi
 
 # ============================================================
-# 2. LAN IP 10.0.0.1（uci-defaults 方式）
+# 2. LAN IP 10.0.0.1
 # ============================================================
 echo "[2/9] 修改默认 LAN IP 为 10.0.0.1"
 mkdir -p files/etc/uci-defaults
-cat > files/etc/uci-defaults/98-set-lan-ip <<'EOF'
+cat > files/etc/uci-defaults/98-set-lan-ip <<'UCI_EOF'
 #!/bin/sh
 uci set network.lan.ipaddr='10.0.0.1'
 uci commit network
 exit 0
-EOF
+UCI_EOF
 chmod +x files/etc/uci-defaults/98-set-lan-ip
 
 # ============================================================
 # 3. root 空密码 / 主题 / zsh
 # ============================================================
 echo "[3/9] 设置密码、主题和 Shell"
-
 if [ -f package/base-files/files/etc/shadow ]; then
     sed -i 's/^root:[^:]*:/root::/' package/base-files/files/etc/shadow
 fi
 
-cat > files/etc/uci-defaults/99-set-theme <<'EOF'
+cat > files/etc/uci-defaults/99-set-theme <<'UCI_EOF'
 #!/bin/sh
 uci set luci.main.mediaurlbase='/luci-static/fluent'
 uci set luci.main.theme='fluent'
 uci commit luci
 exit 0
-EOF
+UCI_EOF
 chmod +x files/etc/uci-defaults/99-set-theme
 
-cat > files/etc/uci-defaults/97-set-shell <<'EOF'
+cat > files/etc/uci-defaults/97-set-shell <<'UCI_EOF'
 #!/bin/sh
 if [ -x /usr/bin/zsh ]; then
     sed -i 's|/bin/ash|/usr/bin/zsh|' /etc/passwd
 fi
 exit 0
-EOF
+UCI_EOF
 chmod +x files/etc/uci-defaults/97-set-shell
 
 # ============================================================
-# 4. 清理 feeds 里自带的旧 lucky，避免包名冲突
+# 4. 清理 feeds 旧 lucky
 # ============================================================
 echo "[4/9] 清理 feeds 旧 lucky"
-
 remove_paths \
     feeds/luci/applications/luci-app-lucky \
     feeds/packages/net/lucky \
@@ -171,7 +155,7 @@ remove_paths \
     package/feeds/packages/lucky
 
 # ============================================================
-# 5. 克隆插件源码（PassWall 已由 feeds 注入，不再手动 clone）
+# 5. 克隆插件源码
 # ============================================================
 echo "[5/9] 克隆插件源码"
 
@@ -187,14 +171,29 @@ clone https://github.com/lisaac/luci-app-diskman.git \
 clone https://github.com/zzsj0928/luci-app-pushbot.git \
     package/luci-app-pushbot
 
-# --- Lucky (sirpdboy)：直接克隆到 package/lucky，保留原始层级 ---
-# 目录结构：
-#   package/lucky/Makefile         → 界面包 luci-app-lucky
-#   package/lucky/lucky/Makefile   → 核心包 lucky
+# --- Lucky (sirpdboy)：自包含 clone，不依赖 clone() 函数 ---
 echo "  - Lucky (sirpdboy 版)"
 if [ ! -d package/lucky ]; then
-    clone https://github.com/sirpdboy/luci-app-lucky.git \
-        package/lucky
+    LUCKY_URL="https://github.com/sirpdboy/luci-app-lucky.git"
+    LUCKY_OK=0
+    for m in \
+        "$LUCKY_URL" \
+        "https://ghfast.top/$LUCKY_URL" \
+        "https://gh-proxy.com/$LUCKY_URL" ; do
+        echo "  - clone: $m"
+        if git clone --depth=1 "$m" package/lucky; then
+            echo "    ✓ 来源: $m"
+            LUCKY_OK=1
+            break
+        fi
+        rm -rf package/lucky
+        echo "    ! 失败，尝试下一个源"
+    done
+
+    if [ "$LUCKY_OK" != "1" ]; then
+        echo "!! Lucky clone 全部失败" >&2
+        exit 1
+    fi
 
     if [ -f package/lucky/Makefile ]; then
         echo "    ✓ package/lucky/Makefile (界面包)"
