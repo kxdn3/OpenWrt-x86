@@ -1,306 +1,848 @@
 #!/bin/bash
-# ============================================================
-# diy-script.sh - ImmortalWrt 25.12 (apk) 自定义脚本
-# x86 物理机专用版
-# 功能：
-#   1. 内核切换到 6.18（含 RTC CMOS 补丁）
-#   2. BIOS Boot Partition 256 -> 1024
-#   3. LAN IP 10.0.0.1 / 主题 / root 空密码 / zsh
-#   4. Lucky（sirpdboy 版，拆分界面包 + 核心包）
-#   5. PassWall / Diskman / PushBot / Fluent
-#   6. 分区大小 + 包启用 + 内核配置同步
-# ============================================================
-
+#
+# OpenWrt x86_64 Mini 自定义编译脚本
+#
+# Source:
+#   coolsnowwolf/lede master
+#
+# LuCI:
+#   openwrt-25.12
+#
+# Kernel:
+#   6.18
+#
+# Theme:
+#   luci-theme-fluent (default, 编译期写死)
+#   luci-theme-bootstrap (kept as fallback)
+#
+# Shell:
+#   default = zsh
+#   included = zsh + bash
+#
+# Docker:
+#   dockerd + containerd + docker + compose (explicit)
+#
+# Partition:
+#   GRUB boot      1024K (1MB)
+#   Kernel         16MB
+#   Rootfs         2048MB
+#
+# Default:
+#   IP: 10.0.0.1
+#
 set -e
-echo "========================================"
-echo "开始执行 DIY 脚本 (ImmortalWrt 25.12 / x86 物理机)"
-echo "========================================"
 
-TARGET_PLATFORM="x86"
-OLD_KVER="6.12"
-NEW_KVER="6.18"
+OPENWRT_PATH="$PWD"
+CFG_FILE="package/base-files/files/bin/config_generate"
+DEFAULT_SETTINGS="package/lean/default-settings/files/zzz-default-settings"
 
-# ---------- 通用函数 ----------
-clone() {
-    local url="$1" dir="$2"
-    [ -d "$dir" ] && { echo "  - 已存在，跳过: $dir"; return 0; }
-    echo "  - clone: $dir"
-    git clone --depth=1 "$url" "$dir" || { echo "!! clone 失败: $url" >&2; exit 1; }
-}
+
+echo "=========================================="
+echo " OpenWrt x86_64 Mini DIY"
+echo " LuCI: openwrt-25.12"
+echo " Kernel: 6.18"
+echo " Theme: fluent (default), bootstrap (fallback)"
+echo " Shell: default=zsh, include=zsh+bash"
+echo " Docker: engine + dockerman"
+echo "=========================================="
+
+
+# ============================================================
+# ========== LuCI 源切换 ==========
+# ============================================================
+
+echo ">>> 设置 LuCI 分支"
+
+sed -i '/^#\?src-git luci/d' feeds.conf.default
+
+echo "src-git luci https://github.com/coolsnowwolf/luci.git;openwrt-25.12" \
+>> feeds.conf.default
+
+
+# ============================================================
+# ========== 基础系统设置 ==========
+# ============================================================
+
+echo ">>> 修改默认网络"
+
+if [ -f "$CFG_FILE" ]; then
+    sed -i 's/192.168.1.1/10.0.0.1/g' "$CFG_FILE"
+    sed -i "s/timezone='.*'/timezone='CST-8'/g" "$CFG_FILE"
+
+    grep -q "Asia/Shanghai" "$CFG_FILE" || \
+    sed -i "/timezone='CST-8'/a\\\t\tset system.@system[-1].zonename='Asia/Shanghai'" "$CFG_FILE"
+fi
+
+
+# 默认 shell = zsh
+echo ">>> 设置默认Shell为 zsh"
+
+if [ -f package/base-files/files/etc/passwd ]; then
+    sed -i 's#/bin/ash#/usr/bin/zsh#g' \
+    package/base-files/files/etc/passwd
+fi
+
+
+# ttyd 自动 root 登录
+if [ -f feeds/packages/utils/ttyd/files/ttyd.config ]; then
+    sed -i 's#/bin/login#/bin/login -f root#g' \
+    feeds/packages/utils/ttyd/files/ttyd.config
+fi
+
+
+# ============================================================
+# ========== x86 分区设置 ==========
+# ============================================================
+
+echo ">>> 设置x86分区"
+
+# BIOS Boot Partition: 256KB -> 1024KB (1MB)
+# 注意:控制它的是 Build/combined 段里硬编码的 256,不是 GRUB_BOOT_PARTSIZE。
+sed -i '/define Build\/combined/,/endef/s/^\s*256\s*$/ 1024/' \
+target/linux/x86/image/Makefile
+
+# Kernel 6.18
+sed -i \
+'s/KERNEL_PATCHVER:=.*/KERNEL_PATCHVER:=6.18/g' \
+target/linux/x86/Makefile
+
+# 若上游将 6.18 归为 testing,则同时设置 testing 版本号
+if grep -q '^KERNEL_TESTING_PATCHVER' target/linux/x86/Makefile; then
+    sed -i \
+    's/KERNEL_TESTING_PATCHVER:=.*/KERNEL_TESTING_PATCHVER:=6.18/g' \
+    target/linux/x86/Makefile
+fi
+
+
+# ============================================================
+# ========== 系统参数优化 ==========
+# ============================================================
+
+echo ">>> 设置conntrack"
+
+SYSCTL_FILE="package/base-files/files/etc/sysctl.conf"
+
+if [ -f "$SYSCTL_FILE" ]; then
+    grep -q "nf_conntrack_max" "$SYSCTL_FILE" || cat >> "$SYSCTL_FILE" <<EOF
+
+# OpenWrt Mini optimize
+net.netfilter.nf_conntrack_max=65535
+
+EOF
+fi
+
+
+# ============================================================
+# ========== 删除原插件 ==========
+# ============================================================
+
+echo ">>> 删除需要替换插件"
 
 remove_paths() {
     for p in "$@"; do
-        [ -e "$p" ] && { echo "  - 删除 $p"; rm -rf "$p"; }
+        if [ -e "$p" ]; then
+            rm -rf "$p"
+            echo "    - removed $p"
+        fi
     done
 }
 
-# ============================================================
-# 0. 内核切换至 6.18（含补丁目录迁移）
-# ============================================================
-echo "[0/8] 内核版本检查与切换"
+remove_paths \
+    feeds/luci/themes/luci-theme-fluent \
+    feeds/luci/applications/luci-app-mosdns \
+    feeds/luci/applications/luci-app-netdata \
+    feeds/luci/applications/luci-app-pushbot \
+    feeds/luci/applications/luci-app-dockerman \
+    feeds/luci/applications/luci-app-diskman
 
-CURRENT_KVER=$(grep -oP 'KERNEL_PATCHVER:=\K[0-9.]+' \
-    "target/linux/${TARGET_PLATFORM}/Makefile" 2>/dev/null || echo "unknown")
-echo "  当前 KERNEL_PATCHVER: ${CURRENT_KVER}"
-
-if [ "${CURRENT_KVER}" = "${NEW_KVER}" ]; then
-    echo "  → 已是 ${NEW_KVER}，跳过迁移"
-elif [ "${CURRENT_KVER}" = "${OLD_KVER}" ]; then
-    echo "  → 执行 ${OLD_KVER} → ${NEW_KVER} 迁移"
-    chmod +x scripts/kernel_bump.sh
-    ./scripts/kernel_bump.sh -p "${TARGET_PLATFORM}" \
-        -s "v${OLD_KVER}" -t "v${NEW_KVER}"
-    sed -i "s/^KERNEL_PATCHVER:=.*/KERNEL_PATCHVER:=${NEW_KVER}/" \
-        "target/linux/${TARGET_PLATFORM}/Makefile"
-    echo "  ✓ KERNEL_PATCHVER 已改为 ${NEW_KVER}"
-else
-    echo "  !! 未知内核版本 ${CURRENT_KVER}，请手动确认" >&2
-    exit 1
-fi
-
-# 校验补丁目录存在
-if [ ! -d "target/linux/${TARGET_PLATFORM}/patches-${NEW_KVER}" ]; then
-    echo "!! patches-${NEW_KVER} 不存在，内核迁移失败" >&2
-    exit 1
-fi
-echo "  ✓ patches-${NEW_KVER} 已就绪"
 
 # ============================================================
-# 0.5 RTC CMOS 补丁（6.18 物理机专属，修复 IRQ 报错）
+# ========== 工具函数 ==========
 # ============================================================
-echo "[0.5/8] 检查 RTC CMOS 补丁"
 
-RTC_PATCH_DIR="target/linux/${TARGET_PLATFORM}/patches-${NEW_KVER}"
-RTC_PATCH_NAME="831-rtc-cmos-use-platform_get_irq_optional-in-probe.patch"
+clone_pkg()
+{
+    local repo="$1"
+    local dir="$2"
+    local attempt
 
-if ls "${RTC_PATCH_DIR}" 2>/dev/null | grep -q "831-rtc-cmos-use-platform_get_irq_optional"; then
-    echo "  → RTC 补丁已存在，跳过"
-else
-    echo "  → 创建 RTC CMOS 补丁"
-    cat > "${RTC_PATCH_DIR}/${RTC_PATCH_NAME}" <<'PATCH_EOF'
-From: Rafael J. Wysocki <rafael.j.wysocki@intel.com>
-Subject: [PATCH] rtc: cmos: Use platform_get_irq_optional() in
- cmos_platform_probe()
+    echo ">>> Clone $repo"
 
-The rtc-cmos driver can live without an IRQ and returning an error code
-from platform_get_irq() is not a problem for it in general, so make it
-call platform_get_irq_optional() in cmos_platform_probe() instead of
-platform_get_irq() to avoid a confusing error message printed by the
-latter if an IRQ cannot be found for index 0, which is possible on x86
-platforms.
+    for attempt in 1 2 3; do
+        rm -rf "$dir"
+        if git clone --depth=1 "$repo" "$dir"; then
+            return 0
+        fi
+        echo ">>> Clone $repo 失败,重试 $attempt/3"
+        sleep 5
+    done
 
---- a/drivers/rtc/rtc-cmos.c
-+++ b/drivers/rtc/rtc-cmos.c
-@@ -1423,9 +1423,18 @@ static int __init cmos_platform_probe(struct platform_device *pdev)
- 	resource = platform_get_resource(pdev, IORESOURCE_IO, 0);
- 	else
- 		resource = platform_get_resource(pdev, IORESOURCE_MEM, 0);
--	irq = platform_get_irq(pdev, 0);
--	if (irq < 0)
-+	irq = platform_get_irq_optional(pdev, 0);
-+	if (irq < 0) {
- 		irq = -1;
-+#ifdef CONFIG_X86
-+		/*
-+		 * On some x86 systems, the IRQ is not
-+		 * defined, but it should always be safe
-+		 * to hardcode it on systems with a
-+		 * legacy PIC.
-+		 */
-+		if (nr_legacy_irqs())
-+			irq = RTC_IRQ;
-+#endif
-+	}
- 
- 	if (resource == NULL) {
- 		dev_err(&pdev->dev, "no I/O or memory resource\n");
-PATCH_EOF
-    echo "  ✓ RTC 补丁已创建"
-fi
+    echo ">>> Clone $repo 彻底失败" >&2
+    return 1
+}
+
 
 # ============================================================
-# 0.7 BIOS Boot Partition 256 -> 1024 (1MB)
+# ========== 第三方插件 ==========
 # ============================================================
-echo "[0.7/8] 调整 BIOS Boot Partition 大小"
 
-echo "  原始 Build/combined 段内含 256 的行："
-sed -n '/define Build\/combined/,/endef/p' target/linux/x86/image/Makefile \
-    | grep -n 256 || echo "    (未找到)"
+echo ">>> 添加第三方插件"
 
-# 精确替换：保留原缩进（tab 或空格）
-sed -i '/define Build\/combined/,/endef/{
-    s/^\([[:space:]]*\)256\([[:space:]]*\)$/\11024\2/
-}' target/linux/x86/image/Makefile
-
-# 校验
-if sed -n '/define Build\/combined/,/endef/p' target/linux/x86/image/Makefile \
-        | grep -qE '^[[:space:]]*1024[[:space:]]*$'; then
-    echo "  ✓ BIOS Boot Partition 已改为 1024"
-else
-    echo "  !! 替换失败，请检查原始行格式" >&2
-    sed -n '/define Build\/combined/,/endef/p' target/linux/x86/image/Makefile
-    exit 1
-fi
-
-# ============================================================
-# 1. LAN IP 10.0.0.1（uci-defaults 方式）
-# ============================================================
-echo "[1/8] 修改默认 LAN IP 为 10.0.0.1"
-mkdir -p files/etc/uci-defaults
-cat > files/etc/uci-defaults/98-set-lan-ip <<'EOF'
-#!/bin/sh
-uci set network.lan.ipaddr='10.0.0.1'
-uci commit network
-exit 0
-EOF
-chmod +x files/etc/uci-defaults/98-set-lan-ip
-
-# ============================================================
-# 2. root 空密码 / 主题 / zsh
-# ============================================================
-echo "[2/8] 设置密码、主题和 Shell"
-
-if [ -f package/base-files/files/etc/shadow ]; then
-    sed -i 's/^root:[^:]*:/root::/' package/base-files/files/etc/shadow
-fi
-
-cat > files/etc/uci-defaults/99-set-theme <<'EOF'
-#!/bin/sh
-uci set luci.main.mediaurlbase='/luci-static/fluent'
-uci set luci.main.theme='fluent'
-uci commit luci
-exit 0
-EOF
-chmod +x files/etc/uci-defaults/99-set-theme
-
-# zsh 用启动时切换，避免构建早期 sshd 找不到 shell
-cat > files/etc/uci-defaults/97-set-shell <<'EOF'
-#!/bin/sh
-if [ -x /usr/bin/zsh ]; then
-    sed -i 's|/bin/ash|/usr/bin/zsh|' /etc/passwd
-fi
-exit 0
-EOF
-chmod +x files/etc/uci-defaults/97-set-shell
-
-# ============================================================
-# 3. 清理 feeds 里自带的旧 lucky，避免包名冲突
-# ============================================================
-echo "[3/8] 清理 feeds 旧 lucky"
-
+# 先删掉 feeds 里自带的旧 lucky（界面 + 核心）
 remove_paths \
     feeds/luci/applications/luci-app-lucky \
     feeds/packages/net/lucky \
     package/feeds/luci/luci-app-lucky \
     package/feeds/packages/lucky
 
-# ============================================================
-# 4. 克隆插件源码（含 sirpdboy Lucky 拆分）
-# ============================================================
-echo "[4/8] 克隆插件源码"
+# sirpdboy 的 luci-app-lucky 仓库里同时含界面包和核心包：
+#   package/tmp-sirpdboy-lucky/         ← 界面包（PKG_VERSION 3.x）
+#   package/tmp-sirpdboy-lucky/lucky/   ← 核心包
+# 必须先把核心包移出来，再单独放到 package/lucky，
+# 否则 OpenWrt 扫描不到它，编译时会 fallback 到 feeds 里的旧核心 2.17.8。
 
-# --- Fluent 主题 ---
-clone https://github.com/LazuliKao/luci-theme-fluent.git \
-    package/luci-theme-fluent
+clone_pkg \
+https://github.com/sirpdboy/luci-app-lucky.git \
+package/tmp-sirpdboy-lucky
 
-# --- PassWall ---
-clone https://github.com/xiaorouji/openwrt-passwall.git \
-    package/openwrt-passwall
-clone https://github.com/xiaorouji/openwrt-passwall-packages.git \
-    package/openwrt-passwall-packages
-
-# --- Diskman ---
-clone https://github.com/lisaac/luci-app-diskman.git \
-    package/luci-app-diskman
-
-# --- PushBot ---
-clone https://github.com/zzsj0928/luci-app-pushbot.git \
-    package/luci-app-pushbot
-
-# --- Lucky (sirpdboy)：先克隆到临时目录，再拆分界面包 + 核心包 ---
-echo "  - Lucky (sirpdboy 版)"
-if [ ! -d package/lucky ] && [ ! -d package/luci-app-lucky ]; then
-    clone https://github.com/sirpdboy/luci-app-lucky.git \
-        package/tmp-sirpdboy-lucky
-
-    if [ -d package/tmp-sirpdboy-lucky/lucky ]; then
-        mv package/tmp-sirpdboy-lucky/lucky package/lucky
-        echo "    - 核心包 → package/lucky"
-    else
-        echo "!! sirpdboy 仓库里没有 lucky/ 子目录" >&2
-        exit 1
-    fi
-
-    mv package/tmp-sirpdboy-lucky package/luci-app-lucky
-    echo "    - 界面包 → package/luci-app-lucky"
-
-    # 校验两个 Makefile
-    [ -f package/lucky/Makefile ] && echo "    ✓ package/lucky/Makefile" \
-        || { echo "!! package/lucky/Makefile 缺失" >&2; exit 1; }
-    [ -f package/luci-app-lucky/Makefile ] && echo "    ✓ package/luci-app-lucky/Makefile" \
-        || { echo "!! package/luci-app-lucky/Makefile 缺失" >&2; exit 1; }
+# 1) 核心包：把 lucky/ 子目录单独移到 package/lucky
+if [ -d package/tmp-sirpdboy-lucky/lucky ]; then
+    mv package/tmp-sirpdboy-lucky/lucky package/lucky
 else
-    echo "  - Lucky 目录已存在，跳过克隆"
+    echo "    ! 警告: sirpdboy 仓库里没有 lucky/ 子目录" >&2
 fi
 
-# ============================================================
-# 5. 分区大小
-# ============================================================
-echo "[5/8] 配置分区大小"
-sed -i '/CONFIG_TARGET_KERNEL_PARTSIZE/d' .config
-sed -i '/CONFIG_TARGET_ROOTFS_PARTSIZE/d' .config
-echo "CONFIG_TARGET_KERNEL_PARTSIZE=16" >> .config
-echo "CONFIG_TARGET_ROOTFS_PARTSIZE=2048" >> .config
+# 2) 界面包：剩下的内容整体移到 package/luci-app-lucky
+mv package/tmp-sirpdboy-lucky package/luci-app-lucky
+
+
+# PushBot
+clone_pkg \
+https://github.com/zzsj0928/luci-app-pushbot \
+package/luci-app-pushbot
+
+# Dockerman
+clone_pkg \
+https://github.com/lisaac/luci-app-dockerman.git \
+package/tmp-dockerman
+
+cp -r \
+package/tmp-dockerman/applications/luci-app-dockerman \
+package/
+
+rm -rf package/tmp-dockerman
+
+clone_pkg \
+https://github.com/lisaac/luci-lib-docker.git \
+package/luci-lib-docker
+
+clone_pkg \
+https://github.com/lisaac/luci-app-diskman \
+package/luci-app-diskman
+
 
 # ============================================================
-# 6. 启用所需包
+# ========== PassWall ==========
 # ============================================================
-echo "[6/8] 启用插件"
-make defconfig > /dev/null 2>&1
 
-for p in \
-    luci-theme-fluent \
-    zsh \
-    kmod-igc \
-    luci-app-passwall \
-    luci-app-dockerman \
-    luci-app-diskman \
-    luci-app-lucky \
-    lucky \
-    luci-app-pushbot \
-    docker \
-    dockerd \
-    docker-compose ; do
-    ./scripts/config --set y "CONFIG_PACKAGE_${p}" 2>/dev/null || \
-        echo "  !! 未找到配置项: CONFIG_PACKAGE_${p}"
+echo ">>> 添加 PassWall"
+
+clone_pkg \
+https://github.com/Openwrt-Passwall/openwrt-passwall-packages \
+package/openwrt-passwall-packages
+
+clone_pkg \
+https://github.com/Openwrt-Passwall/openwrt-passwall \
+package/luci-app-passwall
+
+
+# ============================================================
+# ========== Fluent 主题(默认主题) ==========
+# ============================================================
+
+echo ">>> 添加 Fluent 主题"
+
+clone_pkg \
+https://github.com/LazuliKao/luci-theme-fluent \
+package/luci-theme-fluent
+
+
+# ============================================================
+# ========== 编译期写死 luci 默认主题 ==========
+# ============================================================
+#
+# 说明:
+#   只靠 uci-defaults 不可靠,可能被 lean 的 zzz-default-settings 覆盖。
+#   最稳做法是在编译期直接写入 /etc/config/luci,
+#   这样固件刷完开机就是 fluent,不会变。
+#   bootstrap 源码保留,用户可在后台手动切回。
+#
+echo ">>> 编译期写死 luci 默认主题为 fluent"
+
+LUCI_CONFIG="package/base-files/files/etc/config/luci"
+
+mkdir -p "$(dirname "$LUCI_CONFIG")"
+
+cat > "$LUCI_CONFIG" <<'EOF'
+config core 'main'
+    option lang 'zh_cn'
+    option mediaurlbase '/luci-static/fluent'
+    option resourcebase '/luci-static/resources'
+
+config extern 'flash_keep'
+    option uci '/etc/config/'
+    option dropbear '/etc/dropbear/'
+    option openvpn '/etc/openvpn/'
+    option passwd '/etc/passwd'
+    option opkg '/etc/opkg.conf'
+    option firewall '/etc/firewall.user'
+    option uploads '/lib/uci/upload/'
+
+config internal 'languages'
+    option en 'English'
+    option zh_cn '简体中文'
+
+config internal 'sauth'
+    option sessionpath '/tmp/luci-sessions'
+    option sessiontime '3600'
+
+config internal 'ccache'
+    option enable '1'
+
+config internal 'apply'
+    option rollback '90'
+    option holdoff '4'
+    option timeout '5'
+    option display '1'
+
+config internal 'diag'
+    option dns 'openwrt.org'
+    option ping 'openwrt.org'
+    option route 'openwrt.org'
+EOF
+
+
+# ============================================================
+# ========== 主题强制:base-files uci-defaults 兜底 ==========
+# ============================================================
+#
+# 关键改动:
+#   1) 不再改 feeds/luci/collections/luci/Makefile(会被 feeds update 冲掉)
+#   2) 不再把 uci-defaults 写到 package/lean/default-settings(会被重装覆盖)
+#   3) 统一写到 package/base-files/files/etc/uci-defaults/
+#      因为 base-files 是最底层包,最后打包,不会被覆盖
+#   4) 文件名用 zzz- 前缀,保证排在 lean 的 zzz-default-settings 之后执行
+#
+# 注意:
+#   编译期已写死 /etc/config/luci,这里只是兜底,防止用户误改后无法恢复。
+#
+echo ">>> 兜底:确保默认主题为 Fluent"
+
+BASE_UCI_DIR="package/base-files/files/etc/uci-defaults"
+mkdir -p "$BASE_UCI_DIR"
+
+
+# --- 1) 兜底设置 mediaurlbase ---
+cat > "$BASE_UCI_DIR/zzz-set-fluent-theme" <<'EOF'
+#!/bin/sh
+#
+# 兜底:如果 mediaurlbase 不是 fluent,强制改回
+#
+FLUENT_URL=""
+
+if [ -d /www/luci-static/fluent ]; then
+    FLUENT_URL="/luci-static/fluent"
+else
+    for d in /www/luci-static/fluent*; do
+        [ -d "$d" ] || continue
+        FLUENT_URL="/luci-static/$(basename "$d")"
+        break
+    done
+fi
+
+if [ -n "$FLUENT_URL" ]; then
+    CUR=$(uci -q get luci.main.mediaurlbase)
+    if [ "$CUR" != "$FLUENT_URL" ]; then
+        uci -q set luci.main.mediaurlbase="$FLUENT_URL"
+        uci -q commit luci
+    fi
+fi
+
+exit 0
+EOF
+
+chmod 0755 "$BASE_UCI_DIR/zzz-set-fluent-theme"
+
+
+# --- 2) 兜底:静态资源目录名不一致时补软链 ---
+cat > "$BASE_UCI_DIR/zzz-fix-fluent-static" <<'EOF'
+#!/bin/sh
+FLUENT_DIR="/www/luci-static/fluent"
+
+if [ ! -d "$FLUENT_DIR" ]; then
+    for src in /www/luci-static/fluent*; do
+        [ -d "$src" ] && [ "$src" != "$FLUENT_DIR" ] && \
+            ln -sf "$(basename "$src")" "$FLUENT_DIR" && break
+    done
+fi
+
+exit 0
+EOF
+
+chmod 0755 "$BASE_UCI_DIR/zzz-fix-fluent-static"
+
+
+# --- 3) bash 软链:保证 /bin/bash 存在 ---
+cat > "$BASE_UCI_DIR/zzz-bash-link" <<'EOF'
+#!/bin/sh
+[ -x /usr/bin/bash ] && [ ! -e /bin/bash ] && ln -sf /usr/bin/bash /bin/bash
+exit 0
+EOF
+
+chmod 0755 "$BASE_UCI_DIR/zzz-bash-link"
+
+
+# ============================================================
+# ========== Samba4替换 ==========
+# ============================================================
+
+echo ">>> 替换Samba4"
+
+rm -rf feeds/packages/net/samba4
+
+clone_pkg \
+https://github.com/sbwml/feeds_packages_net_samba4 \
+feeds/packages/net/samba4
+
+SAMBA_CONF="feeds/packages/net/samba4/files/smb.conf.template"
+
+if [ -f "$SAMBA_CONF" ]; then
+    grep -q "server multi channel support" "$SAMBA_CONF" || cat >> "$SAMBA_CONF" <<EOF
+
+# enable multi-channel
+server multi channel support = yes
+
+aio read size = 1
+aio write size = 1
+
+EOF
+fi
+
+
+# ============================================================
+# ========== 核心库更新 ==========
+# ============================================================
+
+echo ">>> 更新核心库"
+
+merge_package()
+{
+    local branch="$1"
+    local repo="$2"
+    local target="$3"
+    shift 3
+
+    local origin="$PWD"
+    local tmp
+    tmp=$(mktemp -d)
+
+    git clone \
+        --depth=1 \
+        -b "$branch" \
+        --filter=blob:none \
+        --sparse \
+        "$repo" \
+        "$tmp"
+
+    cd "$tmp"
+    git sparse-checkout init --cone
+    git sparse-checkout set "$@"
+
+    local dir
+    for dir in "$@"; do
+        mv "$dir" "$origin/$target/"
+    done
+
+    cd "$origin"
+    rm -rf "$tmp"
+}
+
+merge_package \
+master \
+https://github.com/openwrt/packages \
+feeds/packages/libs \
+libs/nghttp3 \
+libs/ngtcp2
+
+
+# coremark替换
+rm -rf feeds/packages/utils/coremark
+
+merge_package \
+main \
+https://github.com/sbwml/openwrt_pkgs \
+feeds/packages/utils \
+coremark
+
+
+# unzip替换
+rm -rf feeds/packages/utils/unzip
+
+clone_pkg \
+https://github.com/sbwml/feeds_packages_utils_unzip \
+feeds/packages/utils/unzip
+
+
+# ============================================================
+# ========== PassWall依赖清理 ==========
+# ============================================================
+
+echo ">>> 删除冲突科学插件"
+
+remove_paths \
+    feeds/packages/net/chinadns-ng \
+    feeds/packages/net/sing-box \
+    feeds/packages/net/xray-core \
+    feeds/packages/net/mosdns \
+    feeds/packages/net/smartdns \
+    feeds/helloworld/luci-app-ssr-plus
+
+
+# ============================================================
+# ========== feeds更新安装 ==========
+# ============================================================
+
+echo ">>> 更新Feeds"
+
+./scripts/feeds update -a
+./scripts/feeds install -a
+
+
+# ============================================================
+# ========== feeds install 后再清一次 default-settings ==========
+# ============================================================
+# feeds install 可能把 lean 的 default-settings 重新铺开,
+# 里面如果带 mediaurlbase,会覆盖我们的 base-files uci-defaults。
+echo ">>> 二次清理 zzz-default-settings 里的 mediaurlbase"
+
+if [ -f "$DEFAULT_SETTINGS" ]; then
+    sed -i '/luci\.main\.mediaurlbase/d' "$DEFAULT_SETTINGS"
+fi
+
+
+# ============================================================
+# ========== 保险:彻底清理非 sirpdboy 的 lucky ==========
+# ============================================================
+# feeds install -a 之后可能又把旧 lucky 拉回来了,
+# 这里再扫一遍,确保只有 package/luci-app-lucky 和 package/lucky 两份。
+#
+echo ">>> 最终清理非 sirpdboy 的 lucky"
+
+find package/feeds feeds -maxdepth 4 -type d -name "*lucky*" 2>/dev/null | \
+    grep -v "^package/luci-app-lucky$" | \
+    grep -v "^package/lucky$" | while read d; do
+    echo "    - removed $d"
+    rm -rf "$d"
 done
 
-make defconfig > /dev/null 2>&1
 
-echo "---- 关键包校验 ----"
-for p in luci-app-passwall luci-app-dockerman luci-app-lucky lucky \
-         zsh luci-theme-fluent ; do
-    if grep -q "^CONFIG_PACKAGE_${p}=y" .config; then
-        echo "  ✓ ${p}"
+# ============================================================
+# ========== 系统显示优化 ==========
+# ============================================================
+
+echo ">>> 优化首页显示"
+
+AUTOCORE="package/lean/autocore/files/x86/autocore"
+
+if [ -f "$AUTOCORE" ]; then
+    sed -i \
+    's/${g}.*/${a}${b}${c}${d}${e}${f}${hydrid}/g' \
+    "$AUTOCORE"
+fi
+
+for file in package/lean/autocore/files/*/index.htm; do
+    [ -f "$file" ] || continue
+    sed -i \
+    's|os\.date()|os.date("%Y-%m-%d %H:%M:%S") .. " " .. translate(os.date("%A"))|g' \
+    "$file"
+done
+
+
+# ============================================================
+# ========== 固件版本 ==========
+# ============================================================
+
+echo ">>> 设置版本号"
+
+VERSION_FILE="package/lean/default-settings/files/zzz-default-settings"
+
+if [ -f "$VERSION_FILE" ]; then
+    DATE_VERSION=$(date +"%y.%m.%d")
+
+    OLD_VERSION=$(grep -m1 DISTRIB_REVISION "$VERSION_FILE" \
+                  | awk -F "'" '{print $2}' \
+                  | head -n1 \
+                  | tr -d '\r')
+
+    if [ -n "$OLD_VERSION" ]; then
+        echo "    旧版本: [$OLD_VERSION]"
+        echo "    新版本: [R${DATE_VERSION} by kxdn]"
+
+        if command -v perl >/dev/null 2>&1; then
+            OLD_VERSION="$OLD_VERSION" \
+            NEW_VERSION="R${DATE_VERSION} by kxdn" \
+            perl -i -pe 's/\Q$ENV{OLD_VERSION}\E/$ENV{NEW_VERSION}/g' \
+                "$VERSION_FILE"
+        else
+            OLD_VERSION_ESC=$(printf '%s' "$OLD_VERSION" \
+                              | sed -e 's/[][\\.^$*\/]/\\&/g')
+            sed -i "s|${OLD_VERSION_ESC}|R${DATE_VERSION} by kxdn|g" \
+                "$VERSION_FILE"
+        fi
     else
-        echo "  ✗ ${p} 未启用（可能依赖不满足）"
+        echo "    未在 $VERSION_FILE 中找到 DISTRIB_REVISION,跳过"
+    fi
+fi
+
+
+# ============================================================
+# ========== 第三方Makefile修复 ==========
+# ============================================================
+
+echo ">>> 修复第三方包路径"
+
+find package -maxdepth 3 -name Makefile \
+    -exec sed -i \
+    's|\.\./\.\./luci.mk|$(TOPDIR)/feeds/luci/luci.mk|g' {} \;
+
+find package -maxdepth 3 -name Makefile \
+    -exec sed -i \
+    's|\.\./\.\./lang/golang/golang-package.mk|$(TOPDIR)/feeds/packages/lang/golang/golang-package.mk|g' {} \;
+
+
+# ============================================================
+# ========== .config 选择 fluent 主题 ==========
+# ============================================================
+#
+# 说明:
+#   - 选中 fluent
+#   - bootstrap 保留(作为 fallback,用户可手动切回)
+#
+echo ">>> .config 选择 fluent 主题"
+
+# 先确保 .config 存在
+[ -f .config ] || cp .config.tmp .config 2>/dev/null || touch .config
+
+sed -i "/CONFIG_PACKAGE_luci-theme-fluent=/d" .config
+echo "CONFIG_PACKAGE_luci-theme-fluent=y" >> .config
+
+
+# ============================================================
+# ========== 清掉 default-settings 里的 mediaurlbase ==========
+# ============================================================
+# 关键:make defconfig 前再清一次,确保 lean 自带设置不会覆盖 fluent。
+#
+echo ">>> make defconfig 前最后一次清理 mediaurlbase"
+
+if [ -f "$DEFAULT_SETTINGS" ]; then
+    sed -i '/luci\.main\.mediaurlbase/d' "$DEFAULT_SETTINGS"
+fi
+
+
+# ============================================================
+# ========== 保留核心功能 ==========
+# ============================================================
+
+echo ">>> 检查核心组件"
+
+CORE_PACKAGES="
+luci-theme-fluent
+luci-compat
+luci-lib-jsonc
+luci-app-passwall
+luci-app-dockerman
+luci-lib-docker
+luci-app-diskman
+luci-app-lucky
+luci-app-pushbot
+iputils-arping
+curl
+wget-ssl
+jq
+ttyd
+zsh
+"
+
+for pkg in $CORE_PACKAGES; do
+    grep -q "CONFIG_PACKAGE_${pkg}=y" .config || \
+    echo "CONFIG_PACKAGE_${pkg}=y" >> .config
+done
+
+# lucky 核心包（独立包名）
+grep -q "CONFIG_PACKAGE_lucky=y" .config || \
+echo "CONFIG_PACKAGE_lucky=y" >> .config
+
+# bash
+grep -q "CONFIG_PACKAGE_bash=y" .config || \
+echo "CONFIG_PACKAGE_bash=y" >> .config
+
+
+# ============================================================
+# ========== Docker 引擎(显式保险) ==========
+# ============================================================
+
+echo ">>> 显式勾选 Docker 引擎"
+
+for pkg in dockerd containerd docker docker-compose; do
+    grep -q "CONFIG_PACKAGE_${pkg}=y" .config || \
+    echo "CONFIG_PACKAGE_${pkg}=y" >> .config
+done
+
+# Docker 网络所需内核模块
+for pkg in \
+    kmod-br-netfilter \
+    kmod-veth \
+    kmod-ipt-nat \
+    kmod-nf-ipvs \
+    kmod-ipt-physdev \
+    kmod-nf-nathelper-extra
+do
+    grep -q "CONFIG_PACKAGE_${pkg}=y" .config || \
+    echo "CONFIG_PACKAGE_${pkg}=y" >> .config
+done
+
+
+# ============================================================
+# ========== 驱动精简 ==========
+# ============================================================
+
+echo ">>> 清理无用驱动"
+
+sed -i -E \
+'/^CONFIG_PACKAGE_kmod-(video|media|sound|i2c|gpio|spi|firewire|mmc|sdhci|drm-amdgpu|nouveau|mhi|qmi|usb-net-qmi|bluetooth|btusb|ath3k|bcmbt)/d' \
+.config
+
+REMOVE_DRIVERS="
+kmod-cfg80211
+kmod-mac80211
+wpad
+hostapd
+iw
+
+kmod-r816
+kmod-8139too
+kmod-8139cp
+kmod-r8125
+kmod-tg3
+kmod-bnx2
+kmod-sky2
+kmod-pcnet32
+kmod-via-rhine
+kmod-via-velocity
+kmod-forcedeth
+kmod-natsemi
+kmod-sis900
+
+bluez
+alsa-lib
+"
+
+for drv in $REMOVE_DRIVERS; do
+    sed -i "/CONFIG_PACKAGE_${drv}/d" .config
+done
+
+
+# ============================================================
+# ========== 保留x86关键驱动 ==========
+# ============================================================
+
+echo ">>> 锁定关键驱动"
+
+KEEP_DRIVERS="
+kmod-igc
+kmod-e1000e
+kmod-ixgbe
+kmod-i40e
+kmod-ahci
+kmod-nvme
+kmod-virtio
+"
+
+for drv in $KEEP_DRIVERS; do
+    grep -q "CONFIG_PACKAGE_${drv}=y" .config || \
+    echo "CONFIG_PACKAGE_${drv}=y" >> .config
+done
+
+
+# ============================================================
+# ========== 最终 defconfig 固化 ==========
+# ============================================================
+
+echo ">>> 最终 defconfig 固化配置"
+make defconfig
+
+
+# ============================================================
+# ========== defconfig 后确认 fluent ==========
+# ============================================================
+
+echo ">>> defconfig 后确认 fluent 主题"
+
+grep -q "CONFIG_PACKAGE_luci-theme-fluent=y" .config || \
+    echo "CONFIG_PACKAGE_luci-theme-fluent=y" >> .config
+
+make defconfig
+
+
+# ============================================================
+# ========== 存在性校验 ==========
+# ============================================================
+
+echo ">>> 校验关键包是否会被编入固件"
+
+for pkg in \
+    zsh bash luci-theme-fluent \
+    dockerd containerd docker \
+    luci-app-pushbot iputils-arping curl wget-ssl jq
+do
+    if grep -q "CONFIG_PACKAGE_${pkg}=y" .config; then
+        echo "    ✓ ${pkg} 已勾选"
+    else
+        echo "    ! 警告: ${pkg} 未勾选" >&2
     fi
 done
 
-# ============================================================
-# 7. 内核配置同步
-# ============================================================
-echo "[7/8] 同步内核配置到 ${NEW_KVER}"
-make kernel_oldconfig CONFIG_TARGET=subtarget > /dev/null 2>&1 || \
-    echo "  !! kernel_oldconfig 有未决项，请手动 make kernel_menuconfig 检查"
 
 # ============================================================
-# 8. 完成
+# ========== 最终检查 ==========
 # ============================================================
-echo "[8/8] 校验 BIOS Boot Partition"
-sed -n '/define Build\/combined/,/endef/p' target/linux/x86/image/Makefile \
-    | grep -n "1024" || echo "  (未匹配到 1024，请手动确认)"
 
-echo "========================================"
-echo "DIY 脚本执行完毕"
-echo "========================================"
+echo
+echo "=========================================="
+echo " diy-mini.sh 执行完成"
+echo
+echo " Platform : x86_64"
+echo " LuCI     : openwrt-25.12"
+echo " Kernel   : 6.18"
+echo " Theme    : fluent (default, 编译期写死)"
+echo "           bootstrap (fallback, 可手动切)"
+echo " Shell    : zsh (default) + bash"
+echo " Docker   : engine + dockerman"
+echo " GRUB     : 1024K (1MB)"
+echo " Kernel P : 16MB"
+echo " Rootfs   : 2048MB"
+echo " IP       : 10.0.0.1"
+echo
+echo " Plugins:"
+echo " PassWall"
+echo " DockerMan  (+ dockerd/containerd/docker)"
+echo " DiskMan"
+echo " Lucky"
+echo " PushBot    (+ arping/curl/wget-ssl/jq)"
+echo " Samba4"
+echo " Fluent Theme (default)"
+echo " TTYD"
+echo " Zsh  (default login shell)"
+echo " Bash (installed, /bin/bash linked)"
+echo
+echo "=========================================="
