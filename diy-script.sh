@@ -20,15 +20,25 @@ TARGET_PLATFORM="x86"
 # ---------- 通用函数 ----------
 clone() {
     local url="$1" dir="$2"
-    [ -d "$dir" ] && { echo "  - 已存在，跳过: $dir"; return 0; }
+    if [ -d "$dir" ]; then
+        echo "  - 已存在，跳过: $dir"
+        return 0
+    fi
     echo "  - clone: $dir"
     git clone --depth=1 "$url" "$dir" || { echo "!! clone 失败: $url" >&2; exit 1; }
 }
 
 remove_paths() {
+    local removed=0
     for p in "$@"; do
-        [ -e "$p" ] && { echo "  - 删除 $p"; rm -rf "$p"; }
+        if [ -e "$p" ]; then
+            echo "  - 删除 $p"
+            rm -rf "$p"
+            removed=1
+        fi
     done
+    [ "$removed" = "0" ] && echo "  - 无匹配目录需要清理"
+    return 0
 }
 
 # ============================================================
@@ -148,10 +158,18 @@ if [ ! -d package/lucky ] && [ ! -d package/luci-app-lucky ]; then
     echo "    - 界面包 → package/luci-app-lucky"
 
     # 校验两个 Makefile
-    [ -f package/lucky/Makefile ] && echo "    ✓ package/lucky/Makefile" \
-        || { echo "!! package/lucky/Makefile 缺失" >&2; exit 1; }
-    [ -f package/luci-app-lucky/Makefile ] && echo "    ✓ package/luci-app-lucky/Makefile" \
-        || { echo "!! package/luci-app-lucky/Makefile 缺失" >&2; exit 1; }
+    if [ -f package/lucky/Makefile ]; then
+        echo "    ✓ package/lucky/Makefile"
+    else
+        echo "!! package/lucky/Makefile 缺失" >&2
+        exit 1
+    fi
+    if [ -f package/luci-app-lucky/Makefile ]; then
+        echo "    ✓ package/luci-app-lucky/Makefile"
+    else
+        echo "!! package/luci-app-lucky/Makefile 缺失" >&2
+        exit 1
+    fi
 else
     echo "  - Lucky 目录已存在，跳过克隆"
 fi
