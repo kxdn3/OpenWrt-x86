@@ -27,8 +27,7 @@ clone() {
         "https://ghfast.top/${url}"
         "https://gh-proxy.com/${url}"
     )
-    local m
-    local attempt
+    local m attempt
     for m in "${candidates[@]}"; do
         for attempt in 1 2 3; do
             if git clone --depth=1 "$m" "$dir"; then
@@ -156,6 +155,7 @@ if [ -n "$LUCI_STATUS_JS" ] && [ -f "$LUCI_STATUS_JS" ]; then
     sed -i "s/ (GMT+[0-9])//g" "$LUCI_STATUS_JS"
     sed -i "s/ (GMT-[0-9])//g" "$LUCI_STATUS_JS"
     echo " ✓ 已完成修改"
+    grep -n "GMT" "$LUCI_STATUS_JS" | head -5 || true
 else
     echo " !! 未找到 luci-mod-status 的 10_system.js，跳过"
 fi
@@ -200,8 +200,7 @@ if [ ! -d package/lucky ]; then
     for m in \
         "$LUCKY_URL" \
         "https://ghfast.top/$LUCKY_URL" \
-        "https://gh-proxy.com/$LUCKY_URL"
-    do
+        "https://gh-proxy.com/$LUCKY_URL"; do
         echo " - clone: $m"
         if git clone --depth=1 "$m" package/lucky; then
             echo " ✓ 来源: $m"
@@ -244,9 +243,7 @@ echo " ✓ 找到 ${MK_COUNT} 个 Makefile"
 echo "[6/8] 配置分区大小"
 sed -i '/CONFIG_TARGET_KERNEL_PARTSIZE/d' .config
 sed -i '/CONFIG_TARGET_ROOTFS_PARTSIZE/d' .config
-# Kernel = 16 MiB
 echo "CONFIG_TARGET_KERNEL_PARTSIZE=16" >> .config
-# RootFS = 2048 MiB
 echo "CONFIG_TARGET_ROOTFS_PARTSIZE=2048" >> .config
 # ============================================================
 # 7. 启用所需包
@@ -261,7 +258,7 @@ docker dockerd docker-compose"
 # 第一次 defconfig
 # ------------------------------------------------------------
 echo " → make defconfig（第一次，生成基础符号）"
-make defconfig > /dev/null 2>&1
+make defconfig
 # ------------------------------------------------------------
 # 追加包开关
 # ------------------------------------------------------------
@@ -275,7 +272,7 @@ done
 # 第二次 defconfig
 # ------------------------------------------------------------
 echo " → make defconfig（第二次，解析依赖）"
-make defconfig > /dev/null 2>&1
+make defconfig
 # ============================================================
 # 关键包校验
 # ============================================================
@@ -303,7 +300,8 @@ for p in $PKGS; do
         grep -A8 "^Package: ${p}$" \
             tmp/.packageinfo \
             | grep -E "Depends:" \
-            | head -3
+            | head -3 \
+            || true
     else
         echo " 包未被构建系统识别"
         echo " 相关 Makefile 位置："
