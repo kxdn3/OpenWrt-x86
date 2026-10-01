@@ -242,21 +242,13 @@ if [ -n "$LUCI_STATUS_JS" ] && [ -f "$LUCI_STATUS_JS" ]; then
 
     echo " → 找到文件: $LUCI_STATUS_JS"
 
-    # 针对 date 命令输出格式，移除
-    # " GMT+8" 或 " GMT-..." 等时区标识
-
     sed -i "s/ GMT+[0-9]//g" "$LUCI_STATUS_JS"
     sed -i "s/ GMT-[0-9]//g" "$LUCI_STATUS_JS"
-
-    # 如果时间字符串是直接拼接的，
-    # 尝试移除括号内的时区
 
     sed -i "s/ (GMT+[0-9])//g" "$LUCI_STATUS_JS"
     sed -i "s/ (GMT-[0-9])//g" "$LUCI_STATUS_JS"
 
     echo " ✓ 已完成修改"
-
-    grep -n "GMT" "$LUCI_STATUS_JS" | head -5
 
 else
 
@@ -286,7 +278,7 @@ echo "[5/8] 克隆插件源码"
 
 
 # ------------------------------------------------------------
-# Fluent 主题
+# Fluent
 # ------------------------------------------------------------
 
 clone \
@@ -313,7 +305,7 @@ clone \
 
 
 # ------------------------------------------------------------
-# Lucky (sirpdboy)
+# Lucky
 # ------------------------------------------------------------
 
 echo " - Lucky (sirpdboy 版)"
@@ -363,7 +355,7 @@ fi
 
 
 # ------------------------------------------------------------
-# 检查 Lucky 内部 Makefile
+# Lucky Makefile 检查
 # ------------------------------------------------------------
 
 echo " ---- package/lucky 下的 Makefile 位置 ----"
@@ -401,7 +393,6 @@ echo " ✓ 找到 ${MK_COUNT} 个 Makefile"
 
 echo "[6/8] 配置分区大小"
 
-
 sed -i '/CONFIG_TARGET_KERNEL_PARTSIZE/d' .config
 sed -i '/CONFIG_TARGET_ROOTFS_PARTSIZE/d' .config
 
@@ -419,7 +410,6 @@ echo "CONFIG_TARGET_ROOTFS_PARTSIZE=2048" >> .config
 # ============================================================
 
 echo "[7/8] 启用插件"
-
 
 PKGS="luci-base luci-compat luci-mod-admin-full \
 luci-theme-fluent zsh kmod-igc \
@@ -539,7 +529,6 @@ done
 # ============================================================
 
 echo "[8/8] 校验 BIOS Boot Partition"
-
 
 sed -n '/define Build\/combined/,/endef/p' \
     target/linux/x86/image/Makefile \
